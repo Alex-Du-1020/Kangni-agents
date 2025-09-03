@@ -1,6 +1,35 @@
 # Kangni Agents
 
-工业级FastAPI后台AI Agent系统，集成RAG文档搜索和数据库查询功能。
+AI智能代理系统，具有RAG搜索功能。
+
+## 功能测试
+
+### 直接运行测试
+```bash
+PYTHONPATH=src python3 test_rag.py
+```
+
+### Docker运行测试
+```bash
+# 构建镜像
+docker build -t kangni-agents .
+
+# 运行测试
+docker run --rm kangni-agents
+
+# 或使用docker-compose
+docker-compose up
+```
+
+## 测试示例
+
+用户问题：`内解锁接地线线束短，无法安装到紧固螺钉位置是那个项目发生的？`
+
+预期答案：包含`东莞1号线项目`
+
+实际答案：`该问题发生在东莞1号线项目。具体情况：在东莞1号线项目中，发现内解锁接地线线束过短，导致无法正确安装到指定的紧固螺钉位置。这影响了设备的正常安装和接地安全。`
+
+✅ 测试通过
 
 ## 功能特性
 
