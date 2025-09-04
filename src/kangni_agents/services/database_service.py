@@ -1,8 +1,9 @@
 from typing import Optional, Dict, Any, List
-from langchain.schema import HumanMessage, SystemMessage
 from ..config import settings
 from ..models import RAGSearchResult
-from ..models.llm_providers import LLMProvider, OpenAIConfig, DeepSeekConfig, AlibabaConfig
+from ..models.llm_implementations import llm_service
+from ..models.llm_providers import LLMMessage
+from ..utils.query_preprocessor import query_preprocessor, PreprocessedQuery
 from .rag_service import rag_service
 import logging
 import json
@@ -17,56 +18,14 @@ class DatabaseService:
         # 加载环境变量
         load_dotenv()
         
-        # 只有在有API密钥时才初始化LLM
-        api_key = settings.openai_api_key or settings.deepseek_api_key
-        if api_key:
-            try:
-                # 根据配置选择LLM提供商，默认使用DeepSeek
-                if "alibaba" in (settings.openai_base_url or "").lower() or "qwen" in (settings.openai_base_url or "").lower():
-                    llm_config = AlibabaConfig(
-                        model_name="qwen-turbo",
-                        api_key=api_key,
-                        base_url=settings.openai_base_url,
-                        temperature=0
-                    )
-                    self.llm_provider = LLMProvider.ALIBABA
-                elif "openai" in (settings.openai_base_url or "").lower() or "api.openai.com" in (settings.openai_base_url or ""):
-                    # 明确指定OpenAI时才使用
-                    llm_config = OpenAIConfig(
-                        model_name="gpt-4",
-                        api_key=api_key,
-                        base_url=settings.openai_base_url,
-                        temperature=0
-                    )
-                    self.llm_provider = LLMProvider.OPENAI
-                else:
-                    # 默认使用DeepSeek
-                    llm_config = DeepSeekConfig(
-                        model_name=settings.llm_chat_model or "deepseek-chat",
-                        api_key=api_key,
-                        base_url=settings.openai_base_url or "https://api.deepseek.com",
-                        temperature=0
-                    )
-                    self.llm_provider = LLMProvider.DEEPSEEK
-                
-                # 初始化LLM客户端
-                from langchain_openai import ChatOpenAI
-                self.llm = ChatOpenAI(
-                    api_key=llm_config.api_key,
-                    base_url=llm_config.base_url,
-                    model=llm_config.model_name,
-                    temperature=llm_config.temperature
-                )
-                
-                self.llm_available = True
-                logger.info(f"LLM initialized successfully with provider: {self.llm_provider}")
-                
-            except Exception as e:
-                logger.warning(f"Failed to initialize LLM: {e}")
-                self.llm_available = False
+        # 使用集中式LLM服务
+        self.llm_available = llm_service.llm_available
+        self.llm_provider = llm_service.llm_provider
+        
+        if self.llm_available:
+            logger.info(f"Database service initialized with LLM provider: {self.llm_provider}")
         else:
-            logger.warning("OpenAI API key not available, LLM features will be disabled")
-            self.llm_available = False
+            logger.warning("LLM service not available, database LLM features will be disabled")
     
     def get_db_config(self) -> Dict[str, Any]:
         """获取数据库配置"""
@@ -162,14 +121,19 @@ class DatabaseService:
             return None
             
         try:
-            # 构建上下文信息
+            # 1. 预处理查询，提取特殊标记
+            preprocessed = query_preprocessor.preprocess_query(question)
+            logger.info(f"Query preprocessing completed: {len(preprocessed.entities)} entities found")
+            
+            # 2. 构建上下文信息
             ddl_context = "\n".join([r.content for r in context_data.get("ddl", [])])
             query_examples = "\n".join([r.content for r in context_data.get("query_sql", [])])
             db_description = "\n".join([r.content for r in context_data.get("description", [])])
             
-            system_prompt = """你是一个专业的SQL生成助手。基于提供的数据库结构、查询示例和描述信息，为用户问题生成准确的SQL查询。
+            # 3. 构建基础系统提示
+            base_system_prompt = """你是一个专业的SQL生成助手。基于提供的数据库结构、查询示例和描述信息，为用户问题生成准确的SQL查询。
 
-要求：
+必须遵守这些要求：
 1. 只返回SQL查询语句，不要添加额外的解释
 2. 确保SQL语法正确
 3. 使用提供的表结构和字段名
@@ -183,27 +147,39 @@ class DatabaseService:
 {query_examples}
 
 数据库描述：
-{db_description}
-"""
+{db_description}"""
             
-            human_prompt = f"用户问题：{question}\n\n请生成对应的SQL查询："
-            
-            messages = [
-                SystemMessage(content=system_prompt.format(
+            # 4. 使用预处理器增强提示词
+            enhanced_system_prompt = query_preprocessor.build_enhanced_prompt(
+                base_system_prompt.format(
                     ddl_context=ddl_context,
                     query_examples=query_examples,
                     db_description=db_description
-                )),
-                HumanMessage(content=human_prompt)
-            ]
+                ),
+                preprocessed
+            )
             
-            response = await self.llm.ainvoke(messages)
-            sql_query = response.content.strip()
+            # 5. 构建人类提示，使用预处理后的查询
+            human_prompt = f"用户问题：{preprocessed.processed_query}\n\n请生成对应的SQL查询："
+            
+            # 6. 调用集中式LLM服务生成SQL
+            sql_query = await llm_service.chat_with_system_prompt(
+                enhanced_system_prompt,
+                human_prompt
+            )
+            sql_query = sql_query.strip()
             
             if sql_query == "INSUFFICIENT_INFO":
                 return None
-                
-            return sql_query
+            
+            # 7. 恢复占位符为原始值
+            final_sql = query_preprocessor.restore_placeholders_in_sql(
+                sql_query, 
+                preprocessed.placeholders
+            )
+            
+            logger.info(f"Generated SQL: {final_sql}")
+            return final_sql
             
         except Exception as e:
             logger.error(f"Error generating SQL: {e}")

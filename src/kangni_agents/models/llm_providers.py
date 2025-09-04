@@ -11,6 +11,7 @@ class LLMProvider(str, Enum):
     OPENAI = "openai"
     DEEPSEEK = "deepseek"
     ALIBABA = "alibaba"
+    OLLAMA = "ollama"
 
 class LLMConfig(BaseModel):
     """LLM配置基类"""
@@ -42,6 +43,12 @@ class AlibabaConfig(LLMConfig):
     access_key_id: Optional[str] = None
     access_key_secret: Optional[str] = None
 
+class OllamaConfig(LLMConfig):
+    """Ollama本地大模型配置"""
+    provider: LLMProvider = LLMProvider.OLLAMA
+    model_name: str = "chatgpt-oss-20b"
+    base_url: str = "http://localhost:11434"
+
 class LLMMessage(BaseModel):
     """LLM消息"""
     role: str  # system, user, assistant
@@ -50,7 +57,7 @@ class LLMMessage(BaseModel):
 class LLMResponse(BaseModel):
     """LLM响应"""
     content: str
-    usage: Optional[Dict[str, int]] = None
+    usage: Optional[Dict[str, Any]] = None
     model: str
     provider: LLMProvider
     finish_reason: Optional[str] = None
@@ -91,4 +98,5 @@ CONFIG_MAPPING = {
     LLMProvider.OPENAI: OpenAIConfig,
     LLMProvider.DEEPSEEK: DeepSeekConfig,
     LLMProvider.ALIBABA: AlibabaConfig,
+    LLMProvider.OLLAMA: OllamaConfig,
 }

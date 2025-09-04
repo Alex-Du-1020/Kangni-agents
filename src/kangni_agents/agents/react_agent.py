@@ -7,7 +7,8 @@ from langchain_core.runnables import RunnableConfig
 
 from ..config import settings
 from ..models import QueryType, RAGSearchResult, QueryResponse
-from ..models.llm_providers import LLMProvider, OpenAIConfig, DeepSeekConfig, AlibabaConfig
+from ..models.llm_implementations import llm_service
+from ..models.llm_providers import LLMMessage
 from ..services.rag_service import rag_service
 from ..services.database_service import db_service
 from ..utils.intent_classifier import intent_classifier
@@ -59,82 +60,26 @@ async def database_query_tool(question: str) -> str:
 
 class KangniReActAgent:
     def __init__(self):
-        # 只有在有API密钥时才初始化LLM
-        api_key = settings.openai_api_key or settings.deepseek_api_key
-        if api_key:
+        # 使用集中式LLM服务
+        self.llm_available = llm_service.llm_available
+        self.llm_provider = llm_service.llm_provider
+        
+        if self.llm_available:
             try:
-                # 根据配置选择LLM提供商，默认使用DeepSeek
-                if "alibaba" in (settings.openai_base_url or "").lower() or "qwen" in (settings.openai_base_url or "").lower():
-                    llm_config = AlibabaConfig(
-                        model_name="qwen-turbo",
-                        api_key=api_key,
-                        base_url=settings.openai_base_url,
-                        temperature=0.1
-                    )
-                    self.llm_provider = LLMProvider.ALIBABA
-                elif "openai" in (settings.openai_base_url or "").lower() or "api.openai.com" in (settings.openai_base_url or ""):
-                    # 明确指定OpenAI时才使用
-                    llm_config = OpenAIConfig(
-                        model_name="gpt-4.1-ca",
-                        api_key=api_key,
-                        base_url=settings.openai_base_url,
-                        temperature=0.1
-                    )
-                    self.llm_provider = LLMProvider.OPENAI
-                else:
-                    # 默认使用DeepSeek
-                    llm_config = DeepSeekConfig(
-                        model_name=settings.llm_chat_model or "deepseek-chat",
-                        api_key=api_key,
-                        base_url=settings.openai_base_url or "https://api.deepseek.com",
-                        temperature=0.1
-                    )
-                    self.llm_provider = LLMProvider.DEEPSEEK
-                
-                # 初始化LLM客户端
-                if self.llm_provider == LLMProvider.OPENAI:
-                    from langchain_openai import ChatOpenAI
-                    self.llm = ChatOpenAI(
-                        api_key=llm_config.api_key,
-                        base_url=llm_config.base_url,
-                        model=llm_config.model_name,
-                        temperature=llm_config.temperature
-                    )
-                elif self.llm_provider == LLMProvider.DEEPSEEK:
-                    from langchain_openai import ChatOpenAI
-                    self.llm = ChatOpenAI(
-                        api_key=llm_config.api_key,
-                        base_url=llm_config.base_url,
-                        model=llm_config.model_name,
-                        temperature=llm_config.temperature
-                    )
-                elif self.llm_provider == LLMProvider.ALIBABA:
-                    from langchain_openai import ChatOpenAI
-                    self.llm = ChatOpenAI(
-                        api_key=llm_config.api_key,
-                        base_url=llm_config.base_url,
-                        model=llm_config.model_name,
-                        temperature=llm_config.temperature
-                    )
-                
-                self.llm_available = True
-                
                 # 绑定工具
                 self.tools = [rag_search_tool, database_query_tool]
-                self.llm_with_tools = self.llm.bind_tools(self.tools)
                 
                 # 构建状态图
                 self.workflow = self._build_workflow()
                 
-                logger.info(f"LLM initialized successfully with provider: {self.llm_provider}")
+                logger.info(f"Agent initialized successfully with LLM provider: {self.llm_provider}")
                 
             except Exception as e:
-                logger.warning(f"Failed to initialize LLM: {e}")
+                logger.warning(f"Failed to initialize agent: {e}")
                 self.llm_available = False
                 self.workflow = None
         else:
-            logger.warning("OpenAI API key not available, agent features will be disabled")
-            self.llm_available = False
+            logger.warning("LLM service not available, agent features will be disabled")
             self.workflow = None
     
     def _build_workflow(self) -> StateGraph:
@@ -206,25 +151,40 @@ class KangniReActAgent:
 请分析问题并决定是否需要使用工具。如果需要，请调用相应的工具；如果不需要，请直接回答。
 """
         
-        messages = [
-            *state["messages"],
-            HumanMessage(content=system_prompt)
-        ]
+        # 转换消息格式为LLMMessage
+        llm_messages = []
+        for msg in state["messages"]:
+            if hasattr(msg, 'content'):
+                role = "user" if isinstance(msg, HumanMessage) else "assistant"
+                llm_messages.append(LLMMessage(role=role, content=msg.content))
+        
+        # 添加系统提示
+        llm_messages.append(LLMMessage(role="user", content=system_prompt))
         
         # Debug logging for LLM input
-        logger.debug(f"LLM input messages: {[{'role': msg.__class__.__name__, 'content': msg.content if hasattr(msg, 'content') else str(msg)} for msg in messages]}")
+        logger.debug(f"LLM input messages: {[{'role': msg.role, 'content': msg.content} for msg in llm_messages]}")
         
-        response = await self.llm_with_tools.ainvoke(messages)
-        
-        # Debug logging for LLM output
-        logger.debug(f"LLM output: {response.content}")
-        if hasattr(response, 'tool_calls') and response.tool_calls:
-            logger.debug(f"LLM tool calls: {[{'name': tc['name'], 'args': tc['args']} for tc in response.tool_calls]}")
-        
-        return {
-            **state,
-            "messages": [*state["messages"], response]
-        }
+        try:
+            response = await llm_service.chat(llm_messages)
+            
+            # Debug logging for LLM output
+            logger.debug(f"LLM output: {response.content}")
+            
+            # 创建AIMessage响应
+            ai_message = AIMessage(content=response.content)
+            
+            return {
+                **state,
+                "messages": [*state["messages"], ai_message]
+            }
+            
+        except Exception as e:
+            logger.error(f"LLM chat error: {e}")
+            error_message = AIMessage(content=f"抱歉，处理您的问题时发生错误: {str(e)}")
+            return {
+                **state,
+                "messages": [*state["messages"], error_message]
+            }
     
     async def execute_tools(self, state: AgentState) -> AgentState:
         """工具执行节点"""
@@ -303,24 +263,42 @@ class KangniReActAgent:
 请直接给出最终答案。
 """
         
-        messages = [
-            *state["messages"],
-            HumanMessage(content=final_prompt)
-        ]
+        # 转换消息格式为LLMMessage
+        llm_messages = []
+        for msg in state["messages"]:
+            if hasattr(msg, 'content'):
+                role = "user" if isinstance(msg, HumanMessage) else "assistant"
+                llm_messages.append(LLMMessage(role=role, content=msg.content))
+        
+        # 添加最终提示
+        llm_messages.append(LLMMessage(role="user", content=final_prompt))
         
         # Debug logging for final response generation
-        logger.debug(f"Final response generation input: {[{'role': msg.__class__.__name__, 'content': msg.content if hasattr(msg, 'content') else str(msg)} for msg in messages]}")
+        logger.debug(f"Final response generation input: {[{'role': msg.role, 'content': msg.content} for msg in llm_messages]}")
         
-        response = await self.llm.ainvoke(messages)
-        
-        # Debug logging for final response output
-        logger.debug(f"Final response output: {response.content}")
-        
-        return {
-            **state,
-            "final_answer": response.content,
-            "messages": [*state["messages"], response]
-        }
+        try:
+            response = await llm_service.chat(llm_messages)
+            
+            # Debug logging for final response output
+            logger.debug(f"Final response output: {response.content}")
+            
+            # 创建AIMessage响应
+            ai_message = AIMessage(content=response.content)
+            
+            return {
+                **state,
+                "final_answer": response.content,
+                "messages": [*state["messages"], ai_message]
+            }
+            
+        except Exception as e:
+            logger.error(f"LLM final response error: {e}")
+            error_message = AIMessage(content=f"抱歉，生成最终回答时发生错误: {str(e)}")
+            return {
+                **state,
+                "final_answer": f"抱歉，生成最终回答时发生错误: {str(e)}",
+                "messages": [*state["messages"], error_message]
+            }
     
     async def query(self, question: str, context: Optional[str] = None) -> QueryResponse:
         """处理用户查询"""

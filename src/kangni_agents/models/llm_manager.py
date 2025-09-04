@@ -2,10 +2,10 @@ import asyncio
 from typing import Dict, List, Optional, Union, AsyncGenerator, Type
 from .llm_providers import (
     BaseLLMProvider, LLMProvider, LLMConfig, LLMMessage, LLMResponse,
-    OpenAIConfig, DeepSeekConfig, AlibabaConfig, CONFIG_MAPPING
+    OpenAIConfig, DeepSeekConfig, AlibabaConfig, OllamaConfig, CONFIG_MAPPING
 )
 from .llm_implementations import (
-    OpenAIProvider, DeepSeekProvider, FallbackProvider
+    OpenAIProvider, DeepSeekProvider, AlibabaProvider, OllamaProvider, FallbackProvider
 )
 import logging
 
@@ -18,8 +18,8 @@ class LLMFactory:
     PROVIDER_IMPLEMENTATIONS: Dict[LLMProvider, Type[BaseLLMProvider]] = {
         LLMProvider.OPENAI: OpenAIProvider,
         LLMProvider.DEEPSEEK: DeepSeekProvider,
-        # TODO: 添加更多提供商实现
-        # LLMProvider.ALIBABA: AlibabaProvider,
+        LLMProvider.ALIBABA: AlibabaProvider,
+        LLMProvider.OLLAMA: OllamaProvider,
     }
     
     @classmethod

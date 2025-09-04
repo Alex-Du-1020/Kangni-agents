@@ -150,7 +150,3 @@ class RAGFlowService:
 
 # 全局实例
 rag_service = RAGFlowService()
-if __name__ == "__main__":
-    query = "内解锁接地线线束短，无法安装到紧固螺钉位置是那个项目发生的？"
-    search_results = asyncio.run(rag_service.search_rag(query, "f3073258886911f08bc30242c0a82006", top_k=5))
-    print(search_results)
