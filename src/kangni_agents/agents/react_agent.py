@@ -24,11 +24,15 @@ class AgentState(TypedDict):
     intent: Optional[QueryType]
     rag_results: Optional[List[RAGSearchResult]]
     db_results: Optional[Dict[str, Any]]
+    sql_query: Optional[str]
+    source_links: Optional[List[str]]
     final_answer: Optional[str]
     reasoning: Optional[str]
+    needs_tools: bool
+    tool_to_use: Optional[str]
 
 @tool
-async def rag_search_tool(query: str, dataset_id: Optional[str] = None) -> str:
+async def rag_search_tool(query: str, dataset_id: Optional[str] = None) -> Dict[str, Any]:
     """搜索RAG文档库获取相关信息"""
     if not dataset_id:
         dataset_id = settings.ragflow_default_dataset_id
@@ -36,27 +40,49 @@ async def rag_search_tool(query: str, dataset_id: Optional[str] = None) -> str:
     results = await rag_service.search_rag(query, dataset_id)
     
     if not results:
-        return "未找到相关文档信息"
+        return {
+            "content": "未找到相关文档信息",
+            "sources": [],
+            "source_links": []
+        }
     
     # 格式化结果
     formatted_results = []
+    source_links = []
+    
     for i, result in enumerate(results[:5], 1):
         formatted_results.append(f"{i}. {result.content[:500]}...")
+        if result.metadata and 'source' in result.metadata:
+            source_links.append(result.metadata['source'])
     
-    return "\n".join(formatted_results)
+    return {
+        "content": "\n".join(formatted_results),
+        "sources": results[:5],
+        "source_links": list(set(source_links))  # 去重
+    }
 
 @tool 
-async def database_query_tool(question: str) -> str:
+async def database_query_tool(question: str) -> Dict[str, Any]:
     """查询数据库获取统计信息"""
     result = await db_service.query_database(question)
     
     if not result.get("success"):
-        return f"数据库查询失败: {result.get('error', '未知错误')}"
+        return {
+            "content": f"数据库查询失败: {result.get('error', '未知错误')}",
+            "sql_query": None,
+            "results": []
+        }
     
-    return json.dumps({
+    formatted_content = json.dumps({
         "sql_query": result.get("sql_query"),
         "results": result.get("results", [])
     }, ensure_ascii=False, indent=2)
+    
+    return {
+        "content": formatted_content,
+        "sql_query": result.get("sql_query"),
+        "results": result.get("results", [])
+    }
 
 class KangniReActAgent:
     def __init__(self):
@@ -97,18 +123,13 @@ class KangniReActAgent:
         
         # 添加边
         workflow.add_edge("classify_intent", "agent_reasoning")
-        workflow.add_edge("agent_reasoning", "tool_execution")
         
-        # 条件边：如果有工具调用，继续到生成响应；否则直接结束
-        def should_continue(state: AgentState) -> str:
-            # 检查是否有工具调用
-            messages = state["messages"]
-            for msg in reversed(messages):
-                if hasattr(msg, 'tool_calls') and msg.tool_calls:
-                    return "generate_response"
-            return END
+        # 条件边：检查是否需要工具
+        def should_use_tools(state: AgentState) -> str:
+            return "tool_execution" if state.get("needs_tools", False) else "generate_response"
         
-        workflow.add_conditional_edges("tool_execution", should_continue)
+        workflow.add_conditional_edges("agent_reasoning", should_use_tools)
+        workflow.add_edge("tool_execution", "generate_response")
         workflow.add_edge("generate_response", END)
         
         return workflow.compile()
@@ -133,7 +154,7 @@ class KangniReActAgent:
         intent = state["intent"]
         
         # 构建系统提示
-        system_prompt = f"""你是一个智能助手，需要回答用户问题。你有两个工具可用：
+        system_prompt = f"""你是一个智能助手，需要分析用户问题并决定是否需要使用工具。你有两个工具可用：
 
 1. rag_search_tool: 用于搜索文档和知识库，适合回答概念、原因、方法等问题
 2. database_query_tool: 用于查询数据库，适合回答统计、数据分析等问题
@@ -141,98 +162,117 @@ class KangniReActAgent:
 当前问题意图分类为: {intent}
 分类原因: {state.get('reasoning', '')}
 
-请根据问题内容决定是否需要使用工具：
-- 如果问题需要搜索文档或知识库信息，使用 rag_search_tool
-- 如果问题需要查询数据库或统计数据，使用 database_query_tool
-- 如果问题很简单或你已经知道答案，可以直接回答，不需要使用工具
-
 用户问题: {query}
 
-请分析问题并决定是否需要使用工具。如果需要，请调用相应的工具；如果不需要，请直接回答。
+请分析问题并回答以下两个问题：
+1. 这个问题是否需要使用工具？(回答：是 或 否)
+2. 如果需要工具，应该使用哪个工具？为什么？
+3. 如果不需要工具，请直接回答用户的问题。
+
+请按以下格式回答：
+需要工具: [是/否]
+工具选择: [rag_search_tool/database_query_tool/无]
+理由: [简要说明]
+回答: [如果不需要工具，请直接回答；如果需要工具，请说明工具调用计划]
 """
         
         # 转换消息格式为LLMMessage
-        llm_messages = []
-        for msg in state["messages"]:
-            if hasattr(msg, 'content'):
-                role = "user" if isinstance(msg, HumanMessage) else "assistant"
-                llm_messages.append(LLMMessage(role=role, content=msg.content))
-        
-        # 添加系统提示
-        llm_messages.append(LLMMessage(role="user", content=system_prompt))
+        llm_messages = [
+            LLMMessage(role="system", content=system_prompt),
+            LLMMessage(role="user", content=query)
+        ]
         
         # Debug logging for LLM input
-        logger.debug(f"LLM input messages: {[{'role': msg.role, 'content': msg.content} for msg in llm_messages]}")
+        logger.debug(f"LLM reasoning input: {system_prompt}")
         
         try:
             response = await llm_service.chat(llm_messages)
             
             # Debug logging for LLM output
-            logger.debug(f"LLM output: {response.content}")
+            logger.debug(f"LLM reasoning output: {response.content}")
+            
+            # 解析响应，确定是否需要工具
+            response_text = response.content.lower()
+            needs_tools = "需要工具: 是" in response_text or "需要工具：是" in response_text
+            
+            # 确定工具类型
+            tool_to_use = None
+            if needs_tools:
+                if "rag_search_tool" in response_text:
+                    tool_to_use = "rag_search_tool"
+                elif "database_query_tool" in response_text:
+                    tool_to_use = "database_query_tool"
+            
+            logger.info(f"Tool analysis: needs_tools={needs_tools}, tool_to_use={tool_to_use}")
             
             # 创建AIMessage响应
             ai_message = AIMessage(content=response.content)
             
             return {
                 **state,
+                "needs_tools": needs_tools,
+                "tool_to_use": tool_to_use,
                 "messages": [*state["messages"], ai_message]
             }
             
         except Exception as e:
-            logger.error(f"LLM chat error: {e}")
-            error_message = AIMessage(content=f"抱歉，处理您的问题时发生错误: {str(e)}")
+            logger.error(f"LLM reasoning error: {e}")
+            error_message = AIMessage(content=f"抱歉，分析您的问题时发生错误: {str(e)}")
             return {
                 **state,
+                "needs_tools": False,
                 "messages": [*state["messages"], error_message]
             }
     
     async def execute_tools(self, state: AgentState) -> AgentState:
         """工具执行节点"""
-        last_message = state["messages"][-1]
+        tool_to_use = state.get("tool_to_use")
+        query = state["query"]
         
-        if hasattr(last_message, 'tool_calls') and last_message.tool_calls:
-            tool_messages = []
+        if not tool_to_use:
+            logger.warning("No tool specified for execution")
+            return state
             
-            for tool_call in last_message.tool_calls:
-                tool_name = tool_call["name"]
-                tool_args = tool_call["args"]
-                tool_call_id = tool_call["id"]
+        logger.info(f"Executing tool: {tool_to_use} with query: {query}")
+        
+        try:
+            if tool_to_use == "rag_search_tool":
+                result = await rag_search_tool.ainvoke({"query": query})
                 
-                logger.info(f"Executing tool: {tool_name} with args: {tool_args}")
+                # 存储RAG结果
+                state["rag_results"] = result.get("sources", [])
+                state["source_links"] = result.get("source_links", [])
                 
-                try:
-                    if tool_name == "rag_search_tool":
-                        result = await rag_search_tool.ainvoke(tool_args)
-                    elif tool_name == "database_query_tool":
-                        result = await database_query_tool.ainvoke(tool_args)
-                    else:
-                        result = f"Unknown tool: {tool_name}"
-                    
-                    # 创建正确的ToolMessage
-                    tool_message = ToolMessage(
-                        content=str(result),
-                        tool_call_id=tool_call_id
-                    )
-                    tool_messages.append(tool_message)
-                    
-                    # Debug logging for tool execution result
-                    logger.debug(f"Tool {tool_name} execution result: {str(result)[:200]}...")
-                    
-                except Exception as e:
-                    logger.error(f"Tool execution error: {e}")
-                    # 创建错误消息
-                    tool_message = ToolMessage(
-                        content=f"工具执行错误: {str(e)}",
-                        tool_call_id=tool_call_id
-                    )
-                    tool_messages.append(tool_message)
+                # 创建工具消息
+                tool_message = AIMessage(content=f"RAG搜索结果：\n{result['content']}")
+                
+            elif tool_to_use == "database_query_tool":
+                result = await database_query_tool.ainvoke({"question": query})
+                
+                # 存储数据库结果
+                state["db_results"] = result.get("results", [])
+                state["sql_query"] = result.get("sql_query")
+                
+                # 创建工具消息
+                tool_message = AIMessage(content=f"数据库查询结果：\n{result['content']}")
+                
+            else:
+                tool_message = AIMessage(content=f"未知工具: {tool_to_use}")
+            
+            logger.debug(f"Tool {tool_to_use} execution result: {tool_message.content[:200]}...")
             
             return {
                 **state,
-                "messages": [*state["messages"], *tool_messages]
+                "messages": [*state["messages"], tool_message]
             }
-        
-        return state
+            
+        except Exception as e:
+            logger.error(f"Tool execution error: {e}")
+            error_message = AIMessage(content=f"工具执行错误: {str(e)}")
+            return {
+                **state,
+                "messages": [*state["messages"], error_message]
+            }
     
     async def generate_response(self, state: AgentState) -> AgentState:
         """生成最终回答"""
@@ -317,8 +357,12 @@ class KangniReActAgent:
                 "intent": None,
                 "rag_results": None,
                 "db_results": None,
+                "sql_query": None,
+                "source_links": None,
                 "final_answer": None,
-                "reasoning": None
+                "reasoning": None,
+                "needs_tools": False,
+                "tool_to_use": None
             }
             
             # 运行工作流
@@ -340,12 +384,35 @@ class KangniReActAgent:
                 if not answer or answer.strip() == "":
                     answer = "抱歉，无法生成回答"
             
-            return QueryResponse(
+            # 构建增强的响应
+            response = QueryResponse(
                 answer=answer,
                 query_type=final_state.get("intent", QueryType.HYBRID),
                 reasoning=final_state.get("reasoning"),
                 confidence=0.8
             )
+            
+            # 添加SQL查询信息（如果来自数据库）
+            if final_state.get("sql_query"):
+                response.sql_query = final_state["sql_query"]
+            
+            # 添加RAG源文件信息（如果来自RAG）
+            if final_state.get("rag_results"):
+                response.sources = final_state["rag_results"]
+            
+            # 添加源链接信息
+            if final_state.get("source_links"):
+                # 将source_links添加到sources的metadata中
+                if response.sources:
+                    for i, source in enumerate(response.sources):
+                        if i < len(final_state["source_links"]):
+                            if not source.metadata:
+                                source.metadata = {}
+                            source.metadata["source_link"] = final_state["source_links"][i]
+            
+            logger.info(f"Query completed successfully. SQL: {bool(response.sql_query)}, Sources: {len(response.sources) if response.sources else 0}")
+            
+            return response
             
         except Exception as e:
             logger.error(f"Agent query error: {e}")
