@@ -1,13 +1,13 @@
 from typing import Dict, Any, List, Optional, TypedDict, Annotated
-from langgraph import StateGraph, END
+from langgraph.graph import StateGraph, END
 from langgraph.graph import add_messages
-from langchain_core.messages import BaseMessage, HumanMessage, AIMessage
+from langchain_core.messages import BaseMessage, HumanMessage, AIMessage, ToolMessage
 from langchain_core.tools import tool
-from langchain_openai import ChatOpenAI
 from langchain_core.runnables import RunnableConfig
 
 from ..config import settings
 from ..models import QueryType, RAGSearchResult, QueryResponse
+from ..models.llm_providers import LLMProvider, OpenAIConfig, DeepSeekConfig, AlibabaConfig
 from ..services.rag_service import rag_service
 from ..services.database_service import db_service
 from ..utils.intent_classifier import intent_classifier
@@ -59,19 +59,83 @@ async def database_query_tool(question: str) -> str:
 
 class KangniReActAgent:
     def __init__(self):
-        self.llm = ChatOpenAI(
-            api_key=settings.openai_api_key,
-            base_url=settings.openai_base_url,
-            model="gpt-4",
-            temperature=0.1
-        )
-        
-        # 绑定工具
-        self.tools = [rag_search_tool, database_query_tool]
-        self.llm_with_tools = self.llm.bind_tools(self.tools)
-        
-        # 构建状态图
-        self.workflow = self._build_workflow()
+        # 只有在有API密钥时才初始化LLM
+        api_key = settings.openai_api_key or settings.deepseek_api_key
+        if api_key:
+            try:
+                # 根据配置选择LLM提供商，默认使用DeepSeek
+                if "alibaba" in (settings.openai_base_url or "").lower() or "qwen" in (settings.openai_base_url or "").lower():
+                    llm_config = AlibabaConfig(
+                        model_name="qwen-turbo",
+                        api_key=api_key,
+                        base_url=settings.openai_base_url,
+                        temperature=0.1
+                    )
+                    self.llm_provider = LLMProvider.ALIBABA
+                elif "openai" in (settings.openai_base_url or "").lower() or "api.openai.com" in (settings.openai_base_url or ""):
+                    # 明确指定OpenAI时才使用
+                    llm_config = OpenAIConfig(
+                        model_name="gpt-4.1-ca",
+                        api_key=api_key,
+                        base_url=settings.openai_base_url,
+                        temperature=0.1
+                    )
+                    self.llm_provider = LLMProvider.OPENAI
+                else:
+                    # 默认使用DeepSeek
+                    llm_config = DeepSeekConfig(
+                        model_name=settings.llm_chat_model or "deepseek-chat",
+                        api_key=api_key,
+                        base_url=settings.openai_base_url or "https://api.deepseek.com",
+                        temperature=0.1
+                    )
+                    self.llm_provider = LLMProvider.DEEPSEEK
+                
+                # 初始化LLM客户端
+                if self.llm_provider == LLMProvider.OPENAI:
+                    from langchain_openai import ChatOpenAI
+                    self.llm = ChatOpenAI(
+                        api_key=llm_config.api_key,
+                        base_url=llm_config.base_url,
+                        model=llm_config.model_name,
+                        temperature=llm_config.temperature
+                    )
+                elif self.llm_provider == LLMProvider.DEEPSEEK:
+                    from langchain_openai import ChatOpenAI
+                    self.llm = ChatOpenAI(
+                        api_key=llm_config.api_key,
+                        base_url=llm_config.base_url,
+                        model=llm_config.model_name,
+                        temperature=llm_config.temperature
+                    )
+                elif self.llm_provider == LLMProvider.ALIBABA:
+                    from langchain_openai import ChatOpenAI
+                    self.llm = ChatOpenAI(
+                        api_key=llm_config.api_key,
+                        base_url=llm_config.base_url,
+                        model=llm_config.model_name,
+                        temperature=llm_config.temperature
+                    )
+                
+                self.llm_available = True
+                
+                # 绑定工具
+                self.tools = [rag_search_tool, database_query_tool]
+                self.llm_with_tools = self.llm.bind_tools(self.tools)
+                
+                # 构建状态图
+                self.workflow = self._build_workflow()
+                
+                logger.info(f"LLM initialized successfully with provider: {self.llm_provider}")
+                
+            except Exception as e:
+                logger.warning(f"Failed to initialize LLM: {e}")
+                self.llm_available = False
+                self.workflow = None
+        else:
+            logger.warning("OpenAI API key not available, agent features will be disabled")
+            self.llm_available = False
+            self.workflow = None
     
     def _build_workflow(self) -> StateGraph:
         """构建LangGraph工作流"""
@@ -88,8 +152,18 @@ class KangniReActAgent:
         
         # 添加边
         workflow.add_edge("classify_intent", "agent_reasoning")
-        workflow.add_edge("agent_reasoning", "tool_execution")  
-        workflow.add_edge("tool_execution", "generate_response")
+        workflow.add_edge("agent_reasoning", "tool_execution")
+        
+        # 条件边：如果有工具调用，继续到生成响应；否则直接结束
+        def should_continue(state: AgentState) -> str:
+            # 检查是否有工具调用
+            messages = state["messages"]
+            for msg in reversed(messages):
+                if hasattr(msg, 'tool_calls') and msg.tool_calls:
+                    return "generate_response"
+            return END
+        
+        workflow.add_conditional_edges("tool_execution", should_continue)
         workflow.add_edge("generate_response", END)
         
         return workflow.compile()
@@ -122,9 +196,14 @@ class KangniReActAgent:
 当前问题意图分类为: {intent}
 分类原因: {state.get('reasoning', '')}
 
-请根据问题内容决定使用哪些工具，并进行推理回答。如果需要使用工具，请先调用相应工具获取信息。
+请根据问题内容决定是否需要使用工具：
+- 如果问题需要搜索文档或知识库信息，使用 rag_search_tool
+- 如果问题需要查询数据库或统计数据，使用 database_query_tool
+- 如果问题很简单或你已经知道答案，可以直接回答，不需要使用工具
 
 用户问题: {query}
+
+请分析问题并决定是否需要使用工具。如果需要，请调用相应的工具；如果不需要，请直接回答。
 """
         
         messages = [
@@ -132,7 +211,15 @@ class KangniReActAgent:
             HumanMessage(content=system_prompt)
         ]
         
+        # Debug logging for LLM input
+        logger.debug(f"LLM input messages: {[{'role': msg.__class__.__name__, 'content': msg.content if hasattr(msg, 'content') else str(msg)} for msg in messages]}")
+        
         response = await self.llm_with_tools.ainvoke(messages)
+        
+        # Debug logging for LLM output
+        logger.debug(f"LLM output: {response.content}")
+        if hasattr(response, 'tool_calls') and response.tool_calls:
+            logger.debug(f"LLM tool calls: {[{'name': tc['name'], 'args': tc['args']} for tc in response.tool_calls]}")
         
         return {
             **state,
@@ -144,11 +231,12 @@ class KangniReActAgent:
         last_message = state["messages"][-1]
         
         if hasattr(last_message, 'tool_calls') and last_message.tool_calls:
-            tool_results = []
+            tool_messages = []
             
             for tool_call in last_message.tool_calls:
                 tool_name = tool_call["name"]
                 tool_args = tool_call["args"]
+                tool_call_id = tool_call["id"]
                 
                 logger.info(f"Executing tool: {tool_name} with args: {tool_args}")
                 
@@ -160,38 +248,59 @@ class KangniReActAgent:
                     else:
                         result = f"Unknown tool: {tool_name}"
                     
-                    tool_results.append({
-                        "tool": tool_name,
-                        "result": result
-                    })
+                    # 创建正确的ToolMessage
+                    tool_message = ToolMessage(
+                        content=str(result),
+                        tool_call_id=tool_call_id
+                    )
+                    tool_messages.append(tool_message)
+                    
+                    # Debug logging for tool execution result
+                    logger.debug(f"Tool {tool_name} execution result: {str(result)[:200]}...")
                     
                 except Exception as e:
                     logger.error(f"Tool execution error: {e}")
-                    tool_results.append({
-                        "tool": tool_name,
-                        "result": f"工具执行错误: {str(e)}"
-                    })
-            
-            # 将工具结果添加到消息中
-            tool_message = HumanMessage(content=f"工具执行结果:\n{json.dumps(tool_results, ensure_ascii=False, indent=2)}")
+                    # 创建错误消息
+                    tool_message = ToolMessage(
+                        content=f"工具执行错误: {str(e)}",
+                        tool_call_id=tool_call_id
+                    )
+                    tool_messages.append(tool_message)
             
             return {
                 **state,
-                "messages": [*state["messages"], tool_message]
+                "messages": [*state["messages"], *tool_messages]
             }
         
         return state
     
     async def generate_response(self, state: AgentState) -> AgentState:
         """生成最终回答"""
-        # 添加最终回答的提示
-        final_prompt = """请基于以上信息生成最终回答。回答要求：
+        # 检查是否有工具结果
+        has_tool_results = False
+        for msg in state["messages"]:
+            if isinstance(msg, ToolMessage):
+                has_tool_results = True
+                break
+        
+        if has_tool_results:
+            # 如果有工具结果，基于工具结果生成回答
+            final_prompt = """请基于以上工具执行结果生成最终回答。回答要求：
 1. 准确、完整地回答用户问题
-2. 如果使用了工具结果，要合理整合信息
+2. 合理整合工具结果信息
 3. 保持回答的逻辑性和可读性
-4. 如果信息不足，要明确说明
+4. 如果工具结果不足，要明确说明
 
 请直接给出最终答案，不要重复工具调用过程。
+"""
+        else:
+            # 如果没有工具结果，直接回答
+            final_prompt = """请基于以上对话生成最终回答。回答要求：
+1. 准确、完整地回答用户问题
+2. 保持回答的逻辑性和可读性
+3. 如果信息不足，要明确说明
+
+请直接给出最终答案。
 """
         
         messages = [
@@ -199,7 +308,13 @@ class KangniReActAgent:
             HumanMessage(content=final_prompt)
         ]
         
+        # Debug logging for final response generation
+        logger.debug(f"Final response generation input: {[{'role': msg.__class__.__name__, 'content': msg.content if hasattr(msg, 'content') else str(msg)} for msg in messages]}")
+        
         response = await self.llm.ainvoke(messages)
+        
+        # Debug logging for final response output
+        logger.debug(f"Final response output: {response.content}")
         
         return {
             **state,
@@ -209,6 +324,13 @@ class KangniReActAgent:
     
     async def query(self, question: str, context: Optional[str] = None) -> QueryResponse:
         """处理用户查询"""
+        if not self.llm_available or not self.workflow:
+            return QueryResponse(
+                answer="抱歉，AI服务暂时不可用，请检查配置",
+                query_type=QueryType.HYBRID,
+                confidence=0.0
+            )
+            
         try:
             # 初始状态
             initial_state = {
@@ -227,8 +349,21 @@ class KangniReActAgent:
                 config=RunnableConfig(recursion_limit=10)
             )
             
+            # 确保有有效的答案
+            answer = final_state.get("final_answer")
+            if not answer or answer.strip() == "":
+                # 如果没有最终答案，尝试从消息中获取最后一个AI消息
+                messages = final_state.get("messages", [])
+                for msg in reversed(messages):
+                    if isinstance(msg, AIMessage) and msg.content and msg.content.strip():
+                        answer = msg.content.strip()
+                        break
+                
+                if not answer or answer.strip() == "":
+                    answer = "抱歉，无法生成回答"
+            
             return QueryResponse(
-                answer=final_state.get("final_answer", "抱歉，无法生成回答"),
+                answer=answer,
                 query_type=final_state.get("intent", QueryType.HYBRID),
                 reasoning=final_state.get("reasoning"),
                 confidence=0.8

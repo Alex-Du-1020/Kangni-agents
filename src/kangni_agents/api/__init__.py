@@ -1,3 +1,3 @@
-from .routes import router
+# API module
 
 __all__ = ["router"]

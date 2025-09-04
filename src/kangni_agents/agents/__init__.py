@@ -1,3 +1,3 @@
-from .react_agent import kangni_agent
+# Agents module - import handled by routes.py with fallback logic
 
 __all__ = ["kangni_agent"]

@@ -1,5 +1,6 @@
 from pydantic_settings import BaseSettings
 from typing import Optional
+from pydantic import Field
 
 class Settings(BaseSettings):
     # RAG设置
@@ -11,18 +12,37 @@ class Settings(BaseSettings):
     db_query_sql_dataset_id: str = "ffcc7faa87f311f09d4a0242c0a80006"
     db_description_dataset_id: str = "6768e88087f211f0a8b00242c0a80006"
     
+    # 数据库配置
+    mysql_host: Optional[str] = "localhost"
+    mysql_user: Optional[str] = None
+    mysql_password: Optional[str] = None
+    mysql_database: Optional[str] = None
+    mysql_port: int = 3306
+    
     # API设置
     api_host: str = "0.0.0.0"
     api_port: int = 8000
     
-    # LLM设置
-    openai_api_key: Optional[str] = None
-    openai_base_url: Optional[str] = None
+    # LLM设置 - 支持环境变量中的命名，默认使用DeepSeek
+    openai_api_key: Optional[str] = Field(default=None, alias="LLM_API_KEY")
+    openai_base_url: Optional[str] = Field(default="https://api.deepseek.com", alias="LLM_BASE_URL")
+    llm_chat_model: Optional[str] = Field(default="deepseek-chat", alias="LLM_CHAT_MODEL")
+    
+    # 支持其他可能的API密钥命名
+    deepseek_api_key: Optional[str] = Field(default=None, alias="DEEPSEEK_API_KEY")
     
     # 日志设置
-    log_level: str = "INFO"
+    log_level: str = Field(default="INFO", alias="LOG_LEVEL")
+    environment: str = Field(default="production", alias="ENVIRONMENT")
     
     class Config:
         env_file = ".env"
+        populate_by_name = True
+    
+    def get_log_level(self) -> str:
+        """根据环境获取日志级别"""
+        if self.environment.lower() == "development" or self.environment.lower() == "dev":
+            return "DEBUG"
+        return self.log_level.upper()
 
 settings = Settings()

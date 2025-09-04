@@ -4,7 +4,14 @@ from typing import Optional
 import logging
 
 from ..models import UserQuery, QueryResponse
-from ..agents.react_agent import kangni_agent
+
+# Try to import the full react_agent, fallback to minimal version
+try:
+    from ..agents.react_agent import kangni_agent
+except ImportError as e:
+    import warnings
+    warnings.warn(f"Could not import full react_agent ({e}), using fallback version")
+    from ..agents.react_agent_fallback import kangni_agent
 
 logger = logging.getLogger(__name__)
 
