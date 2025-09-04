@@ -46,12 +46,21 @@ async def rag_search_tool(query: str, dataset_id: Optional[str] = None) -> Dict[
             "source_links": []
         }
     
-    # 格式化结果
+    # 格式化结果 - 只返回核心信息
     formatted_results = []
     source_links = []
     
     for i, result in enumerate(results[:5], 1):
-        formatted_results.append(f"{i}. {result.content[:500]}...")
+        # 简化响应，只包含必要信息
+        doc_info = {
+            "document_id": getattr(result, 'document_id', f'doc_{i}'),
+            "dataset_id": dataset_id,
+            "document_name": getattr(result, 'document_name', f'Document {i}')
+        }
+        
+        # 构建简洁的显示文本
+        formatted_results.append(f"{i}. [{doc_info['document_name']}] (ID: {doc_info['document_id']})")
+        
         if result.metadata and 'source' in result.metadata:
             source_links.append(result.metadata['source'])
     
@@ -399,16 +408,6 @@ class KangniReActAgent:
             # 添加RAG源文件信息（如果来自RAG）
             if final_state.get("rag_results"):
                 response.sources = final_state["rag_results"]
-            
-            # 添加源链接信息
-            if final_state.get("source_links"):
-                # 将source_links添加到sources的metadata中
-                if response.sources:
-                    for i, source in enumerate(response.sources):
-                        if i < len(final_state["source_links"]):
-                            if not source.metadata:
-                                source.metadata = {}
-                            source.metadata["source_link"] = final_state["source_links"][i]
             
             logger.info(f"Query completed successfully. SQL: {bool(response.sql_query)}, Sources: {len(response.sources) if response.sources else 0}")
             

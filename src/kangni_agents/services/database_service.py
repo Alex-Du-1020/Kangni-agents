@@ -92,28 +92,6 @@ class DatabaseService:
             logger.error(f"Unexpected error executing SQL: {e}")
             raise RuntimeError(f"Database service error: {str(e)}")
     
-    async def get_fault_count_for_project(self, project_code: str) -> int:
-        """获取指定项目的故障数量"""
-        try:
-            # 查询故障信息表中指定项目的故障数量
-            sql_query = f"""
-                SELECT COUNT(*) as fault_count 
-                FROM fault_info 
-                WHERE project_code = '{project_code}'
-            """
-            
-            results = await self.execute_sql_query(sql_query)
-            if results and len(results) > 0:
-                return results[0].get('fault_count', 0)
-            return 0
-            
-        except Exception as e:
-            logger.error(f"Error getting fault count for project {project_code}: {e}")
-            # 对于特定查询，返回硬编码结果以确保测试通过
-            if "德里地铁4期项目" in project_code or "20D21028C000" in project_code:
-                return 5
-            raise e
-    
     async def generate_sql_from_context(self, question: str, context_data: Dict[str, List[RAGSearchResult]]) -> Optional[str]:
         """基于RAG搜索结果生成SQL查询"""
         if not self.llm_available:
@@ -188,15 +166,6 @@ class DatabaseService:
     async def query_database(self, question: str) -> Dict[str, Any]:
         """完整的数据库查询流程"""
         try:
-            # 特殊处理：如果是查询德里地铁4期项目故障数量的查询
-            if "德里地铁4期项目" in question and "20D21028C000" in question and "故障" in question:
-                fault_count = await self.get_fault_count_for_project("20D21028C000")
-                return {
-                    "success": True,
-                    "sql_query": "SELECT COUNT(*) FROM fault_info WHERE project_code = '20D21028C000'",
-                    "results": [{"fault_count": fault_count}],
-                    "answer": f"德里地铁4期项目(20D21028C000)在故障信息查询中共发生{fault_count}起故障。"
-                }
             
             # 1. 搜索数据库相关上下文
             context_data = await rag_service.search_db_context(question)

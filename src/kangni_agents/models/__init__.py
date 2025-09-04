@@ -21,6 +21,21 @@ class RAGSearchResult(BaseModel):
     content: str
     score: float
     metadata: Optional[Dict[str, Any]] = None
+    
+    @property
+    def document_id(self) -> str:
+        """获取文档ID"""
+        return self.metadata.get("document_id", "") if self.metadata else ""
+    
+    @property
+    def document_name(self) -> str:
+        """获取文档名称"""
+        return self.metadata.get("document_name", "") if self.metadata else ""
+    
+    @property
+    def dataset_name(self) -> str:
+        """获取数据集名称"""
+        return self.metadata.get("dataset_name", "") if self.metadata else ""
 
 class DatabaseQueryRequest(BaseModel):
     question: str

@@ -48,26 +48,176 @@ class QueryPreprocessor:
             "parenthesis_enclosed": "GROUPED_INFO"
         }
         
-        # 常见的项目字段映射
+        # 常见的项目字段映射 - 基于description.txt完整数据库结构
         self.field_mappings = {
-            "项目": ["projectname_s", "project_name", "projectcode_s"],
+            # 项目相关字段
+            "项目": ["projectname_s", "project_name", "projectcode_s", "project_code"],
             "项目名称": ["projectname_s", "project_name"],
-            "项目代码": ["projectcode_s", "project_code"],
+            "项目代码": ["projectcode_s", "project_code", "project_id"],
+            "项目编号": ["project_code", "projectcode_s", "project_id"],
+            "项目年份": ["project_year", "project_project_year"],
+            
+            # 订单相关字段
+            "订单": ["workordernumber_s", "orderno", "order_no", "order_number"],
+            "订单号": ["workordernumber_s", "orderno", "order_no"],
+            "工单": ["workordernumber_s", "orderno_s"],
+            "工单号": ["workordernumber_s", "orderno_s"],
+            "订单状态": ["orderstate_s", "order_state"],
+            "订单数量": ["quantity_s", "quantity"],
+            
+            # 物料部件相关字段
+            "物料": ["partname_s", "part_name", "material_name", "partno_s"],
+            "物料名称": ["partname_s", "part_name", "material_name"],
+            "物料编号": ["partno_s", "part_number", "material_number", "material_code"],
+            "物料描述": ["partname_s", "material_description"],
             "部件": ["partname_s", "part_name", "component_name"],
             "部件名称": ["partname_s", "part_name"],
-            "订单": ["orderno", "order_no", "order_number"],
-            "订单号": ["orderno", "order_no"],
+            "零件": ["partname_s", "part_name"],
+            "零件名称": ["partname_s", "part_name"],
+            "图号": ["figureno_s", "figure_type", "zzthzq", "drawing_no"],
+            
+            # 设备相关字段
+            "设备": ["device_name", "mainrescode_s", "equname_s", "equip_name"],
+            "设备名称": ["device_name", "mainrescode_s", "equname_s"],
+            "设备编号": ["device_id", "deviceid_s", "equip_name"],
+            "设备ID": ["device_id", "deviceid_s"],
+            
+            # 人员相关字段
+            "操作人员": ["creator_s", "username", "userno_name"],
+            "操作人工号": ["userno_s", "userno"],
+            "检验人员": ["inspector", "checkusername", "creator_s"],
+            "质检人员": ["username", "checkusername"],
+            "申请人": ["sqr", "submit_user_name", "create_name"],
+            "创建人": ["creator", "create_by", "create_name"],
+            "负责人": ["duty_user_name", "task_user_name"],
+            
+            # 时间相关字段
+            "时间": ["etl_time", "create_date", "create_time"],
+            "创建时间": ["create_date", "create_time", "etl_time"],
+            "开始时间": ["planstarttime_t", "actualstarttime_t", "starttime", "playtime_t"],
+            "结束时间": ["planendtime_t", "actualendtime_t", "endtime", "endtime_t"],
+            "异常时间": ["exception_time", "happen_date"],
+            "故障时间": ["happen_date", "occur_time"],
+            "检验时间": ["checktime", "inspection_start_date", "inspection_end_date"],
+            
+            # 客户供应商字段
             "客户": ["customer_name", "client_name"],
-            "供应商": ["supplier_name", "vendor_name"]
+            "供应商": ["supplier_name", "sup_company_name", "vendor_name"],
+            "供应商编码": ["supplier_code", "sup_company_sap_code"],
+            
+            # 工艺工序字段
+            "工序": ["routeoperaname_s", "operationname_s"],
+            "工序名称": ["routeoperaname_s", "operationname_s"],
+            "工序编号": ["routeoperanumber_s", "processnumber_s"],
+            "工艺路线": ["routeno_s", "route_code"],
+            "工位": ["wcname_s", "locationnumber_s"],
+            "工位名称": ["wcname_s"],
+            "工位编号": ["locationnumber_s"],
+            
+            # 故障异常字段
+            "故障": ["defect_name", "fault_name", "description"],
+            "故障模式": ["defect_name", "fault_name"],
+            "故障原因": ["reason", "cause_analysis"],
+            "异常": ["reason", "exception_time", "description"],
+            "异常原因": ["reason", "cause_analysis"],
+            "不合格": ["bad_describe", "problem_describe"],
+            "缺陷": ["defect_name", "fault_name"],
+            "缺陷分类": ["defect_category_name", "fault_type_name"],
+            
+            # 检验质量字段
+            "检验": ["testproname", "testsortname_s", "testdescription_s"],
+            "检验批次": ["checkbatch", "inspection_lot"],
+            "检验结果": ["testsortupcheck_s", "result", "conclusion"],
+            "质量": ["quality", "quantity"],
+            "数量": ["quantity_s", "quality", "bad_num"],
+            
+            # 其他业务字段
+            "批次": ["batch", "checkbatch"],
+            "序列号": ["serialname_s", "door", "vehicle_door_organization_number"],
+            "车辆": ["vehicle_code", "vehicle_no", "car_no"],
+            "车门": ["door_no", "vehicle_door_id", "door_number"],
+            "平台": ["plat_name", "label"],
+            "工厂": ["factorynumber_s", "factory", "plant_code"],
+            "状态": ["status", "orderstate_s", "checkstate"],
+            "备注": ["remarks", "remark", "comment1_s"]
         }
         
-        # 核心表结构映射
+        # 核心表结构映射 - 基于description.txt完整数据库结构
         self.table_mappings = {
-            "订单": "kn_quality_trace_prod_order_process",
-            "项目订单": "kn_quality_trace_prod_order_process",
-            "生产订单": "kn_quality_trace_prod_order_process",
-            "故障": "fault_info",
-            "故障信息": "fault_info"
+            # 设备异常相关表
+            "设备异常": "kn_quality_equipment_exception_data",
+            "设备故障": "kn_quality_equipment_exception_data",
+            "异常设备": "kn_quality_equipment_exception_data",
+            
+            # 生产订单相关表
+            "生产订单": "kn_quality_trace_prod_order",
+            "订单": "kn_quality_trace_prod_order",
+            "项目订单": "kn_quality_trace_prod_order",
+            "工单": "kn_quality_trace_prod_order",
+            
+            # 生产订单过程记录表
+            "订单过程": "kn_quality_trace_prod_order_process",
+            "生产过程": "kn_quality_trace_prod_order_process",
+            "质量检验": "kn_quality_trace_prod_order_process",
+            
+            # 生产订单工序检验记录表
+            "工序检验": "kn_quality_trace_prod_order_route",
+            "工序记录": "kn_quality_trace_prod_order_route",
+            
+            # 自互检和完工检表
+            "自检": "kn_quality_trace_prod_order_self",
+            "互检": "kn_quality_trace_prod_order_self",
+            "完工检": "kn_quality_trace_prod_order_self",
+            
+            # 用户表
+            "操作人员": "kn_quality_trace_prod_order_user",
+            "用户": "kn_quality_trace_prod_order_user",
+            "人员": "kn_quality_trace_prod_order_user",
+            
+            # 变更流程表
+            "过程变更": "kn_quality_process_change_flow",
+            "变更流程": "kn_quality_process_change_flow",
+            "变更申请": "kn_quality_process_change_flow",
+            
+            # 供方变更审批表
+            "供应商变更": "kn_quality_supplier_change_approval_form",
+            "供方变更": "kn_quality_supplier_change_approval_form",
+            "变更审批": "kn_quality_supplier_change_approval_form",
+            
+            # BOM相关表
+            "BOM": "kn_quality_trace_bom_data",
+            "物料清单": "kn_quality_trace_bom_data",
+            "BOM故障": "kn_quality_trace_bom_data_fault",
+            "供方检验报告": "kn_quality_trace_bom_data_supplier",
+            
+            # 故障相关表
+            "故障装车": "kn_quality_trace_fault_part_load",
+            "装车信息": "kn_quality_trace_fault_part_load",
+            "纠正预防": "kn_quality_trace_history_fault_corrective",
+            "首件鉴定": "kn_quality_trace_history_fault_first",
+            "故障信息": "kn_quality_trace_history_fault_info",
+            "故障记录": "kn_quality_trace_history_fault_info",
+            "故障": "kn_quality_trace_history_fault_info",
+            "普查整改": "kn_quality_trace_history_fault_inspection",
+            "车辆公里数": "kn_quality_trace_history_fault_mileage_time",
+            "运行公里数": "kn_quality_trace_history_fault_mileage_time",
+            "NCR": "kn_quality_trace_history_fault_ncr",
+            "不合格报告": "kn_quality_trace_history_fault_ncr",
+            "试验异常": "kn_quality_trace_history_fault_test",
+            "试制异常": "kn_quality_trace_history_fault_test",
+            
+            # 平台项目表
+            "平台管理": "kn_quality_trace_history_plat_project",
+            "项目管理": "kn_quality_trace_history_plat_project",
+            "平台": "kn_quality_trace_history_plat_project",
+            
+            # 项目交付表
+            "项目交付": "kn_quality_trace_project_delivery",
+            "交付时间": "kn_quality_trace_project_delivery",
+            
+            # 字典表
+            "字典": "kn_quality_trace_sys_dict_pub",
+            "字典数据": "kn_quality_trace_sys_dict_pub"
         }
 
     def extract_entities(self, query: str) -> List[ExtractedEntity]:
