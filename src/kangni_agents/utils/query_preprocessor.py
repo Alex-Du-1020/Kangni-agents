@@ -168,12 +168,7 @@ class QueryPreprocessor:
             "自检": "kn_quality_trace_prod_order_self",
             "互检": "kn_quality_trace_prod_order_self",
             "完工检": "kn_quality_trace_prod_order_self",
-            
-            # 用户表
-            "操作人员": "kn_quality_trace_prod_order_user",
-            "用户": "kn_quality_trace_prod_order_user",
-            "人员": "kn_quality_trace_prod_order_user",
-            
+
             # 变更流程表
             "过程变更": "kn_quality_process_change_flow",
             "变更流程": "kn_quality_process_change_flow",

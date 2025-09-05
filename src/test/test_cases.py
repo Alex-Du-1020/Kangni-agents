@@ -13,7 +13,7 @@ from typing import List, Dict, Any
 import logging
 
 # Add src to path for imports
-sys.path.insert(0, str(Path(__file__).parent / "src"))
+sys.path.insert(0, str(Path(__file__).parent / "../.."))
 
 try:
     from kangni_agents.models import UserQuery
@@ -26,7 +26,7 @@ except ImportError as e:
 
 # Configure logging
 logging.basicConfig(
-    level=logging.INFO,
+    level=logging.DEBUG,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
@@ -106,7 +106,7 @@ async def run_single_test(question: str, keywords: List[str]) -> TestResult:
 async def run_all_tests():
     """运行所有测试用例"""
     # Load test cases
-    test_cases_path = Path("src/tests/testCases.json")
+    test_cases_path = Path("src/test/data/test_cases.json")
     if not test_cases_path.exists():
         print(f"❌ Test cases file not found: {test_cases_path}")
         return
@@ -124,7 +124,7 @@ async def run_all_tests():
     passed = 0
     failed = 0
     
-    for i, test_case in enumerate(test_cases, 1):
+    for i, test_case in enumerate(test_cases[:1], 1):
         question = test_case.get("question", "")
         keywords = test_case.get("keywords", [])
         

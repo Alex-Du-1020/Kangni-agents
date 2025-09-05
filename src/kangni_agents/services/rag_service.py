@@ -11,8 +11,7 @@ logger = logging.getLogger(__name__)
 
 class RAGFlowService:
     def __init__(self):
-        # self.base_url = settings.ragflow_mcp_server_url
-         self.base_url = "http://158.58.50.45:9382/mcp"
+        self.base_url = settings.ragflow_mcp_server_url
     
     async def check_availability(self) -> bool:
         """检查RAG服务是否可用"""

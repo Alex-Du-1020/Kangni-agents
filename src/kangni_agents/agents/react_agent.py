@@ -30,6 +30,11 @@ class AgentState(TypedDict):
     reasoning: Optional[str]
     needs_tools: bool
     tool_to_use: Optional[str]
+    # 新增字段支持验证和fallback流程
+    db_results_valid: bool
+    needs_fallback: bool
+    fallback_executed: bool
+    has_mixed_results: bool
 
 @tool
 async def rag_search_tool(query: str, dataset_id: Optional[str] = None) -> Dict[str, Any]:
@@ -125,12 +130,14 @@ class KangniReActAgent:
         workflow.add_node("classify_intent", self.classify_intent)
         workflow.add_node("agent_reasoning", self.agent_reasoning)
         workflow.add_node("tool_execution", self.execute_tools)
+        workflow.add_node("validate_results", self.validate_results)
+        workflow.add_node("fallback_search", self.fallback_search)
         workflow.add_node("generate_response", self.generate_response)
         
         # 设置入口点
         workflow.set_entry_point("classify_intent")
         
-        # 添加边
+        # 添加基础边
         workflow.add_edge("classify_intent", "agent_reasoning")
         
         # 条件边：检查是否需要工具
@@ -138,7 +145,14 @@ class KangniReActAgent:
             return "tool_execution" if state.get("needs_tools", False) else "generate_response"
         
         workflow.add_conditional_edges("agent_reasoning", should_use_tools)
-        workflow.add_edge("tool_execution", "generate_response")
+        workflow.add_edge("tool_execution", "validate_results")
+        
+        # 条件边：检查是否需要fallback
+        def should_fallback(state: AgentState) -> str:
+            return "fallback_search" if state.get("needs_fallback", False) else "generate_response"
+        
+        workflow.add_conditional_edges("validate_results", should_fallback)
+        workflow.add_edge("fallback_search", "generate_response")
         workflow.add_edge("generate_response", END)
         
         return workflow.compile()
@@ -283,6 +297,96 @@ class KangniReActAgent:
                 "messages": [*state["messages"], error_message]
             }
     
+    
+    async def validate_results(self, state: AgentState) -> AgentState:
+        """验证工具执行结果的有效性"""
+        tool_to_use = state.get("tool_to_use")
+        
+        if tool_to_use == "database_query_tool":
+            # 验证数据库查询结果
+            db_results = state.get("db_results", [])
+            sql_query = state.get("sql_query")
+            
+            # 检查是否有有效的SQL查询和结果
+            db_results_valid = bool(sql_query and db_results and len(db_results) > 0)
+            
+            # 如果数据库结果无效且意图是SQL类型，设置需要fallback
+            needs_fallback = (not db_results_valid and 
+                            state.get("intent") == QueryType.DATABASE)
+            
+            logger.info(f"Database validation: valid={db_results_valid}, needs_fallback={needs_fallback}")
+            
+            return {
+                **state,
+                "db_results_valid": db_results_valid,
+                "needs_fallback": needs_fallback,
+                "fallback_executed": False
+            }
+        else:
+            # RAG搜索或其他情况，直接认为有效
+            return {
+                **state,
+                "db_results_valid": True,
+                "needs_fallback": False,
+                "fallback_executed": False
+            }
+    
+    async def fallback_search(self, state: AgentState) -> AgentState:
+        """当数据库查询无效结果时，执行RAG搜索作为fallback"""
+        query = state["query"]
+        
+        logger.info(f"Executing RAG fallback search for query: {query}")
+        
+        try:
+            # 执行RAG搜索
+            result = await rag_search_tool.ainvoke({"query": query})
+            
+            # 存储RAG结果
+            rag_results = result.get("sources", [])
+            source_links = result.get("source_links", [])
+            
+            # 检查RAG是否有有效结果
+            has_rag_results = bool(rag_results and len(rag_results) > 0)
+            
+            if has_rag_results:
+                # 标记为混合结果（包含SQL和RAG）
+                has_mixed_results = bool(state.get("sql_query"))
+                
+                # 创建工具消息
+                tool_message = AIMessage(content=f"RAG搜索结果（作为补充）：\n{result['content']}")
+                
+                logger.info(f"Fallback search successful: {len(rag_results)} results found")
+                
+                return {
+                    **state,
+                    "rag_results": rag_results,
+                    "source_links": source_links,
+                    "fallback_executed": True,
+                    "has_mixed_results": has_mixed_results,
+                    "messages": [*state["messages"], tool_message]
+                }
+            else:
+                # RAG也没有找到结果
+                no_result_message = AIMessage(content="RAG搜索也未找到相关信息")
+                
+                logger.warning("Fallback search found no results")
+                
+                return {
+                    **state,
+                    "fallback_executed": True,
+                    "has_mixed_results": False,
+                    "messages": [*state["messages"], no_result_message]
+                }
+                
+        except Exception as e:
+            logger.error(f"Fallback search error: {e}")
+            error_message = AIMessage(content=f"补充搜索时发生错误: {str(e)}")
+            return {
+                **state,
+                "fallback_executed": True,
+                "messages": [*state["messages"], error_message]
+            }
+    
     async def generate_response(self, state: AgentState) -> AgentState:
         """生成最终回答"""
         # 检查是否有工具结果
@@ -292,7 +396,21 @@ class KangniReActAgent:
                 has_tool_results = True
                 break
         
-        if has_tool_results:
+        # 检查是否有混合结果（SQL + RAG）
+        has_mixed_results = state.get("has_mixed_results", False)
+        
+        if has_mixed_results:
+            # 如果有混合结果，提供特殊提示
+            final_prompt = """请基于以上工具执行结果生成最终回答。特别注意：
+1. 数据库查询未找到相关结果，但RAG搜索找到了补充信息
+2. 请结合RAG搜索结果来回答用户问题  
+3. 如果RAG结果能够回答用户问题，请提供清晰准确的答案
+4. 如果RAG结果也不能完全回答问题，请明确说明哪些信息可以提供，哪些无法确定
+5. 保持回答的逻辑性和可读性
+
+请直接给出最终答案，不要重复工具调用过程。
+"""
+        elif has_tool_results:
             # 如果有工具结果，基于工具结果生成回答
             final_prompt = """请基于以上工具执行结果生成最终回答。回答要求：
 1. 准确、完整地回答用户问题
@@ -371,7 +489,12 @@ class KangniReActAgent:
                 "final_answer": None,
                 "reasoning": None,
                 "needs_tools": False,
-                "tool_to_use": None
+                "tool_to_use": None,
+                # 新增字段的默认值
+                "db_results_valid": False,
+                "needs_fallback": False,
+                "fallback_executed": False,
+                "has_mixed_results": False
             }
             
             # 运行工作流
@@ -407,7 +530,20 @@ class KangniReActAgent:
             
             # 添加RAG源文件信息（如果来自RAG）
             if final_state.get("rag_results"):
-                response.sources = final_state["rag_results"]
+                # 处理RAG结果，提取文档信息并去重
+                unique_documents = {}
+                for result in final_state["rag_results"]:
+                    if hasattr(result, 'metadata') and result.metadata:
+                        doc_id = result.metadata.get('document_id')
+                        if doc_id and doc_id not in unique_documents:
+                            unique_documents[doc_id] = {
+                                "document_id": doc_id,
+                                "document_name": result.metadata.get('document_name', ''),
+                                "dataset_name": result.metadata.get('dataset_name', '')
+                            }
+                
+                # 转换为列表格式
+                response.sources = list(unique_documents.values())
             
             logger.info(f"Query completed successfully. SQL: {bool(response.sql_query)}, Sources: {len(response.sources) if response.sources else 0}")
             

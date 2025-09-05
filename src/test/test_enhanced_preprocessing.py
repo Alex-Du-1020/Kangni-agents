@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 
 # Add src to path for imports
-sys.path.insert(0, str(Path(__file__).parent / "src"))
+sys.path.insert(0, str(Path(__file__).parent / "../.."))
 
 def test_enhanced_preprocessing():
     """Test the enhanced preprocessing logic"""

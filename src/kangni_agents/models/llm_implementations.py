@@ -11,6 +11,48 @@ import logging
 
 logger = logging.getLogger(__name__)
 
+class LLMProviderConfig:
+    """LLM提供商配置类"""
+    
+    # 从settings获取提供商选择
+    @staticmethod
+    def get_provider():
+        return settings.llm_provider.lower()
+    
+    # 各提供商的配置
+    DEEPSEEK_CONFIG = {
+        "base_url": "https://api.deepseek.com",
+        "model_name": "deepseek-chat",
+        "temperature": 0.1,
+        "max_tokens": None,
+        "timeout": 30
+    }
+    
+    OPENAI_CONFIG = {
+        "base_url": "https://api.chatanywhere.tech/v1",
+        "model_name": "gpt-4.1-ca",
+        "temperature": 0.1,
+        "max_tokens": None,
+        "timeout": 30,
+        "organization": None
+    }
+    
+    ALIBABA_CONFIG = {
+        "base_url": "https://dashscope.aliyuncs.com/compatible-mode/v1",
+        "model_name": "qwen-turbo",
+        "temperature": 0.1,
+        "max_tokens": None,
+        "timeout": 30
+    }
+    
+    OLLAMA_CONFIG = {
+        "base_url": "http://localhost:11434",
+        "model_name": "gpt-oss:20b",
+        "temperature": 0.1,
+        "max_tokens": None,
+        "timeout": 180  # Increased timeout for local Ollama
+    }
+
 class OpenAIProvider(BaseLLMProvider):
     """OpenAI提供商实现"""
     
@@ -217,11 +259,9 @@ class AlibabaProvider(BaseLLMProvider):
         payload = {
             "model": self.config.model_name,
             "messages": alibaba_messages,
+            "temperature": self.config.temperature,
             "stream": stream,
-            "options": {
-                "temperature": self.config.temperature,
-                **self.config.extra_params
-            },
+            **self.config.extra_params,
             **kwargs
         }
         
@@ -230,38 +270,40 @@ class AlibabaProvider(BaseLLMProvider):
                 return self._stream_chat(client, payload)
             else:
                 response = await client.post(
-                    f"{self.base_url}/v1/messages",
+                    f"{self.base_url}/chat/completions",
                     headers=self.headers,
                     json=payload
                 )
                 response.raise_for_status()
                 
                 result = response.json()
+                choice = result["choices"][0]
                 
                 return LLMResponse(
-                    content=result["content"][0]["text"],
+                    content=choice["message"]["content"],
                     usage=result.get("usage"),
                     model=result["model"],
                     provider=self.config.provider,
-                    finish_reason=result.get("stop_reason")
+                    finish_reason=choice.get("finish_reason")
                 )
     
     async def _stream_chat(self, client: httpx.AsyncClient, payload: Dict[str, Any]) -> AsyncGenerator[str, None]:
         """流式聊天"""
         async with client.stream(
             "POST",
-            f"{self.base_url}/v1/messages",
+            f"{self.base_url}/chat/completions",
             headers=self.headers,
             json=payload
         ) as response:
             async for line in response.aiter_lines():
                 if line.startswith("data: "):
                     data = line[6:]
+                    if data == "[DONE]":
+                        break
                     try:
                         chunk = json.loads(data)
-                        if chunk["type"] == "content_block_delta":
-                            if chunk["delta"].get("text"):
-                                yield chunk["delta"]["text"]
+                        if chunk["choices"][0]["delta"].get("content"):
+                            yield chunk["choices"][0]["delta"]["content"]
                     except json.JSONDecodeError:
                         continue
     
@@ -269,9 +311,9 @@ class AlibabaProvider(BaseLLMProvider):
         """检查Alibaba服务是否可用"""
         try:
             async with httpx.AsyncClient(timeout=10) as client:
-                # Alibaba没有public的health check endpoint，使用一个简单请求测试
+                # Use a simple test message to check availability
                 response = await client.post(
-                    f"{self.base_url}/v1/messages",
+                    f"{self.base_url}/chat/completions",
                     headers=self.headers,
                     json={
                         "model": self.config.model_name,
@@ -430,45 +472,96 @@ class CentralizedLLMService:
     
     def _initialize_llm(self):
         """初始化LLM客户端"""
-        api_key = settings.openai_api_key or settings.deepseek_api_key
-        if not api_key:
-            logger.warning("No API key available, LLM features will be disabled")
-            return
-        
         try:
-            # 根据配置选择LLM提供商，默认使用DeepSeek
-            if "alibaba" in (settings.openai_base_url or "").lower() or "qwen" in (settings.openai_base_url or "").lower():
-                llm_config = AlibabaConfig(
-                    model_name="qwen-turbo",
-                    api_key=api_key,
-                    base_url=settings.openai_base_url,
-                    temperature=0.1
-                )
-                self.llm_provider = LLMProvider.ALIBABA
-                self.llm_client = AlibabaProvider(llm_config)
-            elif "openai" in (settings.openai_base_url or "").lower() or "api.openai.com" in (settings.openai_base_url or ""):
-                # 明确指定OpenAI时才使用
-                llm_config = OpenAIConfig(
-                    model_name="gpt-4.1-ca",
-                    api_key=api_key,
-                    base_url=settings.openai_base_url,
-                    temperature=0.1
-                )
-                self.llm_provider = LLMProvider.OPENAI
-                self.llm_client = OpenAIProvider(llm_config)
-            else:
-                # 默认使用DeepSeek
+            # 根据settings中的配置选择LLM提供商
+            provider = LLMProviderConfig.get_provider()
+            
+            if provider == "deepseek":
+                api_key = settings.deepseek_api_key
+                if not api_key:
+                    logger.warning("DeepSeek API key not available")
+                    return
+                    
+                config = LLMProviderConfig.DEEPSEEK_CONFIG
                 llm_config = DeepSeekConfig(
-                    model_name=settings.llm_chat_model or "deepseek-chat",
+                    model_name=config["model_name"],
                     api_key=api_key,
-                    base_url=settings.openai_base_url or "https://api.deepseek.com",
-                    temperature=0.1
+                    base_url=config["base_url"],
+                    temperature=config["temperature"],
+                    max_tokens=config["max_tokens"],
+                    timeout=config["timeout"]
                 )
                 self.llm_provider = LLMProvider.DEEPSEEK
                 self.llm_client = DeepSeekProvider(llm_config)
+                
+            elif provider == "openai":
+                api_key = settings.openai_api_key
+                if not api_key:
+                    logger.warning("OpenAI API key not available")
+                    return
+                    
+                config = LLMProviderConfig.OPENAI_CONFIG
+                llm_config = OpenAIConfig(
+                    model_name=config["model_name"],
+                    api_key=api_key,
+                    base_url=config["base_url"],
+                    temperature=config["temperature"],
+                    max_tokens=config["max_tokens"],
+                    timeout=config["timeout"],
+                    organization=config.get("organization")
+                )
+                self.llm_provider = LLMProvider.OPENAI
+                self.llm_client = OpenAIProvider(llm_config)
+                
+            elif provider == "alibaba":
+                api_key = settings.alibaba_api_key
+                if not api_key:
+                    logger.warning("Alibaba API key not available")
+                    return
+                    
+                config = LLMProviderConfig.ALIBABA_CONFIG
+                llm_config = AlibabaConfig(
+                    model_name=config["model_name"],
+                    api_key=api_key,
+                    base_url=config["base_url"],
+                    temperature=config["temperature"],
+                    max_tokens=config["max_tokens"],
+                    timeout=config["timeout"]
+                )
+                self.llm_provider = LLMProvider.ALIBABA
+                self.llm_client = AlibabaProvider(llm_config)
+                
+            elif provider == "ollama":
+                # Ollama不需要API key，使用本地服务
+                config = LLMProviderConfig.OLLAMA_CONFIG
+                llm_config = OllamaConfig(
+                    model_name=config["model_name"],
+                    api_key="",  # Ollama不需要API key
+                    base_url=config["base_url"],
+                    temperature=config["temperature"],
+                    max_tokens=config["max_tokens"],
+                    timeout=config["timeout"]
+                )
+                self.llm_provider = LLMProvider.OLLAMA
+                self.llm_client = OllamaProvider(llm_config)
+                
+            else:
+                logger.warning(f"Unknown provider: {provider}, falling back to Ollama")
+                # 回退到Ollama
+                config = LLMProviderConfig.OLLAMA_CONFIG
+                llm_config = OllamaConfig(
+                    model_name=config["model_name"],
+                    api_key="",
+                    base_url=config["base_url"],
+                    temperature=config["temperature"],
+                    max_tokens=config["max_tokens"],
+                    timeout=config["timeout"]
+                )
+                self.llm_provider = LLMProvider.OLLAMA
+                self.llm_client = OllamaProvider(llm_config)
             
             self.llm_available = True
-            logger.info(f"Centralized LLM service initialized with provider: {self.llm_provider}")
+            logger.info(f"Centralized LLM service initialized with provider: {self.llm_provider} (model: {config['model_name']})")
             
         except Exception as e:
             logger.warning(f"Failed to initialize centralized LLM service: {e}")
@@ -478,21 +571,66 @@ class CentralizedLLMService:
     async def chat(self, messages: List[LLMMessage], **kwargs) -> LLMResponse:
         """统一的聊天接口"""
         if not self.llm_available or not self.llm_client:
-            raise RuntimeError("LLM service not available")
+            # Instead of raising error, try to reinitialize
+            logger.warning("LLM service not available, attempting to reinitialize...")
+            self._initialize_llm()
+            
+            if not self.llm_available or not self.llm_client:
+                # Still not available, use fallback
+                fallback = FallbackProvider(None)
+                return await fallback.chat(messages, **kwargs)
         
-        return await self.llm_client.chat(messages, **kwargs)
+        try:
+            return await self.llm_client.chat(messages, **kwargs)
+        except Exception as e:
+            logger.error(f"LLM chat error with {self.llm_provider}: {e}")
+            # Try to fallback to another provider
+            return await self._fallback_chat(messages, **kwargs)
+    
+    async def _fallback_chat(self, messages: List[LLMMessage], **kwargs) -> LLMResponse:
+        """尝试使用其他可用的提供商"""
+        current_provider = LLMProviderConfig.get_provider()
+        fallback_providers = ["deepseek", "openai", "alibaba"]
+        
+        # Remove current provider from fallback list
+        if current_provider in fallback_providers:
+            fallback_providers.remove(current_provider)
+        
+        for provider in fallback_providers:
+            try:
+                # Check if we have the necessary API key
+                if provider == "deepseek" and not settings.deepseek_api_key:
+                    continue
+                elif provider == "openai" and not settings.openai_api_key:
+                    continue
+                elif provider == "alibaba" and not settings.alibaba_api_key:
+                    continue
+                
+                logger.info(f"Trying fallback provider: {provider}")
+                temp_service = CentralizedLLMService()
+                success = temp_service.switch_provider(provider)
+                
+                if success and await temp_service.is_available():
+                    return await temp_service.chat(messages, **kwargs)
+                    
+            except Exception as e:
+                logger.warning(f"Fallback provider {provider} failed: {e}")
+                continue
+        
+        # All providers failed, use fallback response
+        logger.error("All LLM providers failed, using fallback response")
+        fallback = FallbackProvider(None)
+        return await fallback.chat(messages, **kwargs)
+    
     
     async def chat_with_system_prompt(self, system_prompt: str, user_message: str, **kwargs) -> str:
         """便捷的聊天接口，自动构建系统提示"""
-        if not self.llm_available or not self.llm_client:
-            raise RuntimeError("LLM service not available")
-        
         messages = [
             LLMMessage(role="system", content=system_prompt),
             LLMMessage(role="user", content=user_message)
         ]
         
-        response = await self.llm_client.chat(messages, **kwargs)
+        response = await self.chat(messages, **kwargs)
         return response.content
     
     async def is_available(self) -> bool:
@@ -511,8 +649,46 @@ class CentralizedLLMService:
         return {
             "provider": self.llm_provider,
             "available": self.llm_available,
-            "client_type": type(self.llm_client).__name__ if self.llm_client else None
+            "client_type": type(self.llm_client).__name__ if self.llm_client else None,
+            "current_config": LLMProviderConfig.get_provider()
         }
+    
+    def switch_provider(self, provider: str) -> bool:
+        """动态切换LLM提供商"""
+        valid_providers = ["deepseek", "openai", "alibaba", "ollama"]
+        if provider.lower() not in valid_providers:
+            logger.error(f"Invalid provider: {provider}. Valid options: {valid_providers}")
+            return False
+        
+        # 更新settings中的配置
+        settings.llm_provider = provider.lower()
+        
+        # 重新初始化
+        self._initialize_llm()
+        
+        logger.info(f"Switched to provider: {provider}")
+        return self.llm_available
+    
+    def get_available_providers(self) -> List[str]:
+        """获取可用的提供商列表"""
+        return ["deepseek", "openai", "alibaba", "ollama"]
+    
+    def get_provider_config(self, provider: str = None) -> Dict[str, Any]:
+        """获取指定提供商的配置"""
+        if provider is None:
+            provider = LLMProviderConfig.get_provider()
+        
+        provider = provider.lower()
+        if provider == "deepseek":
+            return LLMProviderConfig.DEEPSEEK_CONFIG
+        elif provider == "openai":
+            return LLMProviderConfig.OPENAI_CONFIG
+        elif provider == "alibaba":
+            return LLMProviderConfig.ALIBABA_CONFIG
+        elif provider == "ollama":
+            return LLMProviderConfig.OLLAMA_CONFIG
+        else:
+            return {}
 
 
 # 全局LLM服务实例

@@ -23,13 +23,11 @@ class Settings(BaseSettings):
     api_host: str = "0.0.0.0"
     api_port: int = 8000
     
-    # LLM设置 - 支持环境变量中的命名，默认使用DeepSeek
-    openai_api_key: Optional[str] = Field(default=None, alias="LLM_API_KEY")
-    openai_base_url: Optional[str] = Field(default="https://api.deepseek.com", alias="LLM_BASE_URL")
-    llm_chat_model: Optional[str] = Field(default="deepseek-chat", alias="LLM_CHAT_MODEL")
-    
-    # 支持其他可能的API密钥命名
+    # LLM设置 - 简化的配置
+    llm_provider: str = Field(default="deepseek", alias="LLM_PROVIDER")  # 可选: "deepseek", "openai", "alibaba", "ollama"
+    openai_api_key: Optional[str] = Field(default=None, alias="OPENAI_API_KEY")
     deepseek_api_key: Optional[str] = Field(default=None, alias="DEEPSEEK_API_KEY")
+    alibaba_api_key: Optional[str] = Field(default=None, alias="ALIBABA_API_KEY")
     
     # 日志设置
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
