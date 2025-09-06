@@ -124,7 +124,7 @@ async def run_all_tests():
     passed = 0
     failed = 0
     
-    for i, test_case in enumerate(test_cases[:1], 1):
+    for i, test_case in enumerate(test_cases, 1):
         question = test_case.get("question", "")
         keywords = test_case.get("keywords", [])
         

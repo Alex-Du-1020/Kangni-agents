@@ -29,7 +29,8 @@ class IntentClassifier:
             "增长", "growth", "趋势", "trend",
             "占比", "比例", "percentage", "percent", "率",
             "分组", "group", "分类", "category",
-            "时间段", "时间范围", "date range", "period"
+            "时间段", "时间范围", "date range", "period",
+            "NCR", "历史故障", "变更", "变更流程", "生产过程变更"
         ]
         
         # 明确的数据库操作词汇

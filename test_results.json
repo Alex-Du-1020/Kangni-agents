@@ -1,0 +1,147 @@
+[
+  {
+    "question": "#合肥S1号线项目乘客室门#这个项目一共有多少个去重后生产订单？",
+    "expected_keywords": [
+      "845"
+    ],
+    "success": true,
+    "error": null,
+    "duration": 26.607070207595825,
+    "keyword_matches": [
+      "845"
+    ],
+    "response": "answer='根据数据库查询结果，合肥S1号线项目乘客室门相关的去重后生产订单数量为 **845个**。' query_type=<QueryType.DATABASE: 'database'> sources=None sql_query=\"SELECT COUNT(DISTINCT workorderno_s) FROM kn_quality_trace_prod_order WHERE projectname_s LIKE '%合肥S1号线项目乘客室门%';\" confidence=0.8 reasoning='检测到统计或数据查询相关词汇，将使用数据库查询'"
+  },
+  {
+    "question": "深圳14号线门扇外观问题团队中的质量工程师是谁？",
+    "expected_keywords": [
+      "耿俊"
+    ],
+    "success": false,
+    "error": null,
+    "duration": 12.667186975479126,
+    "keyword_matches": [],
+    "response": "answer='根据深圳14号线项目门扇外观问题的8D分析报告，该问题的质量工程师是**王伟**。' query_type=<QueryType.HYBRID: 'hybrid'> sources=[{'document_id': '5a9852e8888911f0bad20242c0a86006', 'document_name': '序号1-KZG-04-20221102深圳14号线项目门扇外观问题8D分析报告（终版） 20221119(1)(1)(1).xls', 'dataset_name': '康尼轨道质量问题分析报告文件'}, {'document_id': '5a85d51e888911f0bad20242c0a86006', 'document_name': 'Y20150928 上海11号线三秒不解锁故障8D分析报告 Rev.11.xls', 'dataset_name': '康尼轨道质量问题分析报告文件'}, {'document_id': 'd875e810888911f0a7680242c0a86006', 'document_name': '20250306 深圳地铁6号线支线项目端子固定螺栓松动问题分析报告250317.pdf', 'dataset_name': '康尼轨道质量问题分析报告文件'}, {'document_id': 'd6716a94888911f0a7680242c0a86006', 'document_name': 'KZG-04-202502011 关于四方智能动车组项目司机室侧门门窗划伤问题分析报告.doc', 'dataset_name': '康尼轨道质量问题分析报告文件'}, {'document_id': 'd752cae8888911f0a7680242c0a86006', 'document_name': '20D21119G003-KS0T0727-01 珠三角CRH6F-A城际动车组项目客室门电磁阀故障分析报告 B版.doc', 'dataset_name': '康尼轨道质量问题分析报告文件'}] sql_query=None confidence=0.8 reasoning='问题意图不够明确，将同时使用文档搜索和数据库查询'"
+  },
+  {
+    "question": "内解锁接地线线束短，无法安装到紧固螺钉位置是那个项目发生的？",
+    "expected_keywords": [
+      "东莞1号线项目"
+    ],
+    "success": true,
+    "error": null,
+    "duration": 14.946104049682617,
+    "keyword_matches": [
+      "东莞1号线项目"
+    ],
+    "response": "answer='根据故障分析报告记录，您描述的“内解锁接地线线束短，无法安装到紧固螺钉位置”问题，发生在**东莞1号线项目**中。\\n\\n该问题在编号为 **EFR202503065** 的故障分析报告中进行了详细记录和分析。' query_type=<QueryType.HYBRID: 'hybrid'> sources=[{'document_id': 'db077a1c888911f0a7680242c0a86006', 'document_name': 'EFR202503065 东莞1号线项目故障分析报告（内解锁接地线线束短）2025-3-26_20250331100558433.pdf', 'dataset_name': '康尼轨道质量问题分析报告文件'}, {'document_id': '5a85d51e888911f0bad20242c0a86006', 'document_name': 'Y20150928 上海11号线三秒不解锁故障8D分析报告 Rev.11.xls', 'dataset_name': '康尼轨道质量问题分析报告文件'}, {'document_id': 'd5854c36888911f0a7680242c0a86006', 'document_name': 'EFR202505024-四方CR400AF-Z智能型动车组项目（2329列4车2-2门主锁电磁阀输出口故障）B.pdf', 'dataset_name': '康尼轨道质量问题分析报告文件'}, {'document_id': '6e1150be887911f0b0c10242c0a86006', 'document_name': 'SH-202503-0109上海16号线车门无法关闭问题8D分析报告20250306.docx', 'dataset_name': '康尼轨道质量问题分析报告文件'}] sql_query=None confidence=0.8 reasoning='问题意图不够明确，将同时使用文档搜索和数据库查询'"
+  },
+  {
+    "question": "BOM中0128000064物料的供应商是谁？",
+    "expected_keywords": [
+      "南京松凯机电科技有限公司"
+    ],
+    "success": true,
+    "error": null,
+    "duration": 30.575516939163208,
+    "keyword_matches": [
+      "南京松凯机电科技有限公司"
+    ],
+    "response": "answer='根据查询结果，物料编号为0128000064的供应商是**南京松凯机电科技有限公司**。如果您需要进一步的供应商详细信息或有其他相关问题，请补充说明。' query_type=<QueryType.HYBRID: 'hybrid'> sources=None sql_query=\"SELECT supplier_name FROM kn_quality_trace_bom_data WHERE material_number = '0128000064';\" confidence=0.8 reasoning='问题意图不够明确，将同时使用文档搜索和数据库查询'"
+  },
+  {
+    "question": "101412549生产订单的操作人员是谁？",
+    "expected_keywords": [
+      "张翔",
+      "夏钟会",
+      "卢伟"
+    ],
+    "success": true,
+    "error": null,
+    "duration": 22.993561029434204,
+    "keyword_matches": [
+      "张翔",
+      "夏钟会",
+      "卢伟"
+    ],
+    "response": "answer='生产订单号 101412549 的操作人员共有8位，分别是：\\n\\n1.  张翔2\\n2.  夏钟会\\n3.  卢伟\\n4.  曾天金\\n5.  戎有路\\n6.  葛全军\\n7.  周清\\n8.  高磊\\n9.  朱义明\\n\\n该订单的生产操作由以上多位人员共同完成。' query_type=<QueryType.HYBRID: 'hybrid'> sources=None sql_query=\"SELECT creator_s FROM kn_quality_trace_prod_order WHERE workorderno_s = '101412549';\" confidence=0.8 reasoning='问题意图不够明确，将同时使用文档搜索和数据库查询'"
+  },
+  {
+    "question": "102293652订单的图号是多少？",
+    "expected_keywords": [
+      "M201510395"
+    ],
+    "success": true,
+    "error": null,
+    "duration": 18.406527996063232,
+    "keyword_matches": [
+      "M201510395"
+    ],
+    "response": "answer='订单号 102293652 对应的图号是 **M201510395**。' query_type=<QueryType.DATABASE: 'database'> sources=None sql_query=\"SELECT figureno_s FROM kn_quality_trace_prod_order WHERE workorderno_s = '102293652';\" confidence=0.8 reasoning='检测到统计或数据查询相关词汇，将使用数据库查询'"
+  },
+  {
+    "question": "102256885订单BOM中0128000064物料的供应商是谁？",
+    "expected_keywords": [
+      "南京松凯机电科技有限公司"
+    ],
+    "success": true,
+    "error": null,
+    "duration": 19.588707208633423,
+    "keyword_matches": [
+      "南京松凯机电科技有限公司"
+    ],
+    "response": "answer='根据查询结果，订单102256885的BOM中物料 **0128000064** 的供应商是 **南京松凯机电科技有限公司**。' query_type=<QueryType.HYBRID: 'hybrid'> sources=None sql_query=\"SELECT supplier_name FROM kn_quality_trace_bom_data WHERE order_number = '102256885' AND material_number = '0128000064';\" confidence=0.8 reasoning='问题意图不够明确，将同时使用文档搜索和数据库查询'"
+  },
+  {
+    "question": "德里地铁4期项目(20D21028C000)在故障信息查询中共发生多少起故障？",
+    "expected_keywords": [
+      "5"
+    ],
+    "success": true,
+    "error": null,
+    "duration": 22.08086085319519,
+    "keyword_matches": [
+      "5"
+    ],
+    "response": "answer='根据德里地铁项目故障信息数据库的查询结果，项目代码为 **20D21028C000** 的德里地铁4期项目，在故障信息查询中**共发生了5起故障**。' query_type=<QueryType.DATABASE: 'database'> sources=None sql_query=\"SELECT COUNT(*) FROM kn_quality_trace_history_fault_info WHERE project_code = '20D21028C000';\" confidence=0.8 reasoning='检测到统计或数据查询相关词汇，将使用数据库查询'"
+  },
+  {
+    "question": "故障编号SH-202508-0899的故障后果是什么？",
+    "expected_keywords": [
+      "无影响"
+    ],
+    "success": true,
+    "error": null,
+    "duration": 21.193082332611084,
+    "keyword_matches": [
+      "无影响"
+    ],
+    "response": "answer='关于故障编号SH-202508-0899的查询结果如下：\\n\\n该故障的后果为：**无影响**。\\n\\n这意味着此故障未对设备或系统的正常运行造成任何影响。' query_type=<QueryType.DATABASE: 'database'> sources=None sql_query=\"SELECT service_effect_name FROM kn_quality_trace_history_fault_info WHERE report_code = 'SH-202508-0899';\" confidence=0.8 reasoning='检测到统计或数据查询相关词汇，将使用数据库查询'"
+  },
+  {
+    "question": "NCR编号NCR-202508-1070的问题性质是什么？",
+    "expected_keywords": [
+      "批量"
+    ],
+    "success": true,
+    "error": null,
+    "duration": 19.95639204978943,
+    "keyword_matches": [
+      "批量"
+    ],
+    "response": "answer='NCR编号NCR-202508-1070的问题性质是“批量”。' query_type=<QueryType.DATABASE: 'database'> sources=None sql_query=\"SELECT more_or_single_name FROM kn_quality_trace_history_fault_ncr WHERE report_code = 'NCR-202508-1070';\" confidence=0.8 reasoning='检测到统计或数据查询相关词汇，将使用数据库查询'"
+  },
+  {
+    "question": "不合格单号2025050017是在那个项目阶段发生的问题？",
+    "expected_keywords": [
+      "型式试验"
+    ],
+    "success": true,
+    "error": null,
+    "duration": 26.475889205932617,
+    "keyword_matches": [
+      "型式试验"
+    ],
+    "response": "answer='不合格单号 **2025050017** 是在 **型式试验** 阶段发生的问题。' query_type=<QueryType.HYBRID: 'hybrid'> sources=None sql_query=\"SELECT trial_source_name \\nFROM kn_quality_trace_history_fault_test \\nWHERE trial_no = '2025050017' \\nLIMIT 1;\" confidence=0.8 reasoning='问题意图不够明确，将同时使用文档搜索和数据库查询'"
+  }
+]

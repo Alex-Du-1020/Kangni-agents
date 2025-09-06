@@ -87,15 +87,41 @@ async def database_query_tool(question: str) -> Dict[str, Any]:
             "results": []
         }
     
-    formatted_content = json.dumps({
-        "sql_query": result.get("sql_query"),
-        "results": result.get("results", [])
-    }, ensure_ascii=False, indent=2)
+    # 处理日期序列化问题
+    def serialize_dates(obj):
+        """递归处理对象中的日期类型，转换为字符串"""
+        if hasattr(obj, 'isoformat'):  # datetime, date 对象
+            return obj.isoformat()
+        elif isinstance(obj, dict):
+            return {key: serialize_dates(value) for key, value in obj.items()}
+        elif isinstance(obj, list):
+            return [serialize_dates(item) for item in obj]
+        else:
+            return obj
+    
+    # 序列化结果中的日期对象
+    serialized_results = serialize_dates(result.get("results", []))
+    
+    try:
+        formatted_content = json.dumps({
+            "sql_query": result.get("sql_query"),
+            "results": serialized_results
+        }, ensure_ascii=False, indent=2)
+    except (TypeError, ValueError) as e:
+        # 如果仍然有序列化问题，使用更安全的格式化方法
+        logger.warning(f"JSON serialization failed, using fallback formatting: {e}")
+        formatted_content = f"SQL查询: {result.get('sql_query', 'N/A')}\n"
+        formatted_content += f"结果数量: {len(serialized_results)}\n"
+        formatted_content += "结果数据:\n"
+        for i, row in enumerate(serialized_results[:5], 1):  # 只显示前5行
+            formatted_content += f"  {i}. {row}\n"
+        if len(serialized_results) > 5:
+            formatted_content += f"  ... 还有 {len(serialized_results) - 5} 行数据"
     
     return {
         "content": formatted_content,
         "sql_query": result.get("sql_query"),
-        "results": result.get("results", [])
+        "results": serialized_results
     }
 
 class KangniReActAgent:

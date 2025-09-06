@@ -41,7 +41,7 @@ async def test_llm_provider(provider_name: str):
     try:
         # 创建新的LLM服务实例并切换提供商
         test_service = CentralizedLLMService()
-        success = test_service. (provider_name)
+        success = test_service.switch_provider(provider_name)
         
         if not success:
             print(f"❌ 无法初始化 {provider_name} 提供商")

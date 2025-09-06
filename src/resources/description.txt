@@ -261,7 +261,7 @@ supplier_code：供应商，物料供应商的编码
 supplier_name：供应商名称，物料供应商的名称
 sampling_quantity：采样数量，质量检验的采样数量
 defect_quantity：缺陷数量，检验中发现的缺陷数量
-inspector：检验人员，执行质量检验的人员
+inspector：检验人员，执行质量检验的人员，报检人
 receiver_name：收货人，物料的接收人员
 ebeln：采购订单号，关联的采购订单编号
 system_status：系统状态，记录在系统中的状态
