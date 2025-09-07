@@ -27,7 +27,7 @@ pip install -e .
 
 #### Production Mode
 ```bash
-./start_server.sh
+./prod_server.sh
 ```
 
 #### Direct Command
@@ -38,50 +38,55 @@ python -m src.kangni_agents.main
 
 ### 4. Test the Installation
 
-#### Quick Test (Recommended)
-Run a quick test to verify basic functionality:
+#### Comprehensive Test Suite (Recommended)
+Run the comprehensive test suite to verify all functionality:
 
 ```bash
-# Using test runner (recommended)
-python run_tests.py quick
-
-# Or directly
-python src/tests/quick_test.py
+# Run comprehensive test suite
+python src/test/test_comprehensive.py
 ```
 
 **Expected Output:**
 ```
-🎉 Quick test passed! System is ready to use.
-✅ DeepSeek is configured as the default LLM provider
-✅ The specific question returns the expected result (5)
-✅ Application can start successfully
-```
+🚀 Kangni Agents Comprehensive Test Suite
+================================================================================
+📋 History Service Tests
+✅ Saved query history with ID: 11
+✅ Retrieved 3 history items for user
+✅ Added 'like' feedback with ID: 5
+✅ Feedback stats - Likes: 1, Dislikes: 0
 
-#### Comprehensive Test
-For full system verification, run the comprehensive test suite:
+📋 API Endpoint Tests
+✅ Query created successfully
+✅ User history retrieved: 4 items
+✅ Session history retrieved: 13 items
+✅ Search results: 3 items
 
-```bash
-# Using test runner (recommended)
-python run_tests.py all
+📋 User Email Validation Tests
+✅ Query successful with user_email
+✅ Correctly rejected query without user_email
+✅ Correctly rejected query with empty user_email
 
-# Or directly
-python src/tests/test_all.py
-```
+📋 Query Preprocessing Tests
+✅ PASS - All 5 test cases passed
 
-**Expected Output:**
-```
-🎉 All tests passed! System is working correctly.
-✅ DeepSeek is configured as the default LLM provider
-✅ The specific question returns the expected result (5)
-✅ All services are available and working
-✅ Application can start successfully
-```
+📋 LLM Connection Tests
+✅ Current LLM configuration test successful
 
-#### All Tests
-Run all test suites:
+📋 RAG Service Tests
+✅ RAG service is available
+✅ Found 10 relevant records
 
-```bash
-python run_tests.py all-tests
+📋 Test Cases Execution
+✅ PASS - 4/5 test cases passed
+
+================================================================================
+📊 COMPREHENSIVE TEST SUITE SUMMARY
+================================================================================
+Total test categories: 7
+Passed: 7
+Failed: 0
+Success rate: 100.0%
 ```
 
 ### 5. Access the API
@@ -177,338 +182,201 @@ This section provides comprehensive testing instructions for the Kangni Agents s
 Before running tests, ensure you have:
 
 1. **Environment Configuration**: Create a `.env` file with proper API keys and database credentials
-2. **Dependencies**: All required packages installed (`pip install -e .`)
-3. **Services Running**: 
-   - RAG MCP Server (http://158.58.50.45:9382/mcp)
-   - MySQL Database with required tables
+2. **Database Access**: Ensure database connection is available
+3. **External Services**: Verify access to:
+   - RAGFlow MCP server
    - LLM API access (DeepSeek, OpenAI, or Alibaba)
 
-### Test Categories
+### Comprehensive Test Suite
 
-#### 1. Service Availability Tests
-
-Test if all required services are available and properly configured:
+The main testing approach is through the comprehensive test suite that covers all functionality:
 
 ```bash
-# Test service availability check
+# Run the complete test suite
+python src/test/test_history.py
+```
+
+This test suite includes:
+
+#### 1. History Service Tests
+- ✅ Save query history (successful and failed queries)
+- ✅ Retrieve user history with pagination
+- ✅ Add and manage user feedback (likes/dislikes)
+- ✅ Add and manage user comments
+- ✅ Get feedback statistics
+- ✅ Search history by keywords
+- ✅ Get recent queries
+- ✅ Get session-specific history
+
+#### 2. API Endpoint Tests
+- ✅ Query endpoint with user_email validation
+- ✅ User history API endpoints
+- ✅ Session history API endpoints
+- ✅ Search history API endpoints
+- ✅ Recent queries API endpoints
+- ✅ Feedback management API endpoints
+- ✅ Comment management API endpoints
+- ✅ Feedback statistics API endpoints
+
+#### 3. User Email Validation Tests
+- ✅ Query with valid user_email (should succeed)
+- ✅ Query without user_email (should fail with 422)
+- ✅ Query with empty user_email (should fail with 400)
+
+#### 4. Query Preprocessing Tests
+- ✅ Entity extraction from marked queries (#标记#)
+- ✅ Multiple entity handling
+- ✅ Complex project name processing
+- ✅ Mixed marker types (#, [], "", ())
+- ✅ Queries without special markers
+
+#### 5. LLM Connection Tests
+- ✅ LLM provider configuration verification
+- ✅ API key validation
+- ✅ Service availability checks
+- ✅ Basic chat functionality
+
+#### 6. RAG Service Tests
+- ✅ RAG service availability
+- ✅ Document search functionality
+- ✅ Database context search
+- ✅ Result relevance validation
+
+#### 7. Test Cases Execution
+- ✅ Real-world query testing
+- ✅ Keyword matching validation
+- ✅ Performance measurement
+- ✅ Error handling verification
+
+### Individual Test Categories
+
+You can run specific test categories individually:
+
+```bash
+# Test only history functionality
 python -c "
-import sys; sys.path.insert(0, 'src')
-from kangni_agents.main import check_service_availability
-import asyncio
-asyncio.run(check_service_availability())
-print('✅ All services are available')
-"
-```
-
-**Expected Output:**
-```
-INFO:kangni_agents.main:Checking service availability...
-INFO:kangni_agents.main:RAG service imported successfully
-INFO:kangni_agents.main:RAG service connection test successful
-INFO:kangni_agents.main:Database service imported successfully
-INFO:kangni_agents.main:Database connection test successful
-INFO:kangni_agents.main:LLM service available
-INFO:kangni_agents.main:All services are available
-✅ All services are available
-```
-
-#### 2. LLM Provider Configuration Tests
-
-Verify that DeepSeek is configured as the default LLM provider:
-
-```bash
-# Test LLM provider configuration
-python -c "
-import sys; sys.path.insert(0, 'src')
-from kangni_agents.config import settings
-from kangni_agents.services.database_service import db_service
-from kangni_agents.agents.react_agent import kangni_agent
-
-print(f'Base URL: {settings.openai_base_url}')
-print(f'Model: {settings.llm_chat_model}')
-print(f'Database Service Provider: {db_service.llm_provider}')
-print(f'React Agent Provider: {kangni_agent.llm_provider}')
-"
-```
-
-**Expected Output:**
-```
-Base URL: https://api.deepseek.com
-Model: deepseek-chat
-Database Service Provider: LLMProvider.DEEPSEEK
-React Agent Provider: LLMProvider.DEEPSEEK
-```
-
-#### 3. Application Startup Tests
-
-Test that the application can start successfully with fail-fast behavior:
-
-```bash
-# Test application startup
-python -c "
-import sys; sys.path.insert(0, 'src')
-from kangni_agents.main import app
-print('✅ FastAPI app created successfully')
-"
-```
-
-#### 4. Specific Question Tests
-
-Test the specific question that should return result "5":
-
-```bash
-# Test the specific question
-python -c "
-import sys; sys.path.insert(0, 'src')
-import asyncio
-from kangni_agents.services.database_service import db_service
-
-async def test_question():
-    question = '德里地铁4期项目(20D21028C000)在故障信息查询中共发生多少起故障？'
-    result = await db_service.query_database(question)
-    print(f'Question: {question}')
-    print(f'Success: {result.get(\"success\")}')
-    print(f'Answer: {result.get(\"answer\")}')
-    print(f'Results: {result.get(\"results\")}')
-    
-    if result.get('success') and '5' in str(result.get('results', [])):
-        print('✅ Test passed: Answer contains expected result (5)')
-    else:
-        print('❌ Test failed: Answer does not contain expected result (5)')
-
-asyncio.run(test_question())
-"
-```
-
-**Expected Output:**
-```
-Question: 德里地铁4期项目(20D21028C000)在故障信息查询中共发生多少起故障？
-Success: True
-Answer: 德里地铁4期项目(20D21028C000)在故障信息查询中共发生5起故障。
-Results: [{'fault_count': 5}]
-✅ Test passed: Answer contains expected result (5)
-```
-
-#### 5. RAG Functionality Tests
-
-Test RAG document search functionality:
-
-```bash
-# Test RAG search
-python -c "
-import sys; sys.path.insert(0, 'src')
-import asyncio
-from kangni_agents.services.rag_service import rag_service
-
-async def test_rag():
-    question = '内解锁接地线线束短，无法安装到紧固螺钉位置是那个项目发生的？'
-    results = await rag_service.search_rag(question, 'f3073258886911f08bc30242c0a82006')
-    print(f'Question: {question}')
-    print(f'Results count: {len(results)}')
-    if results:
-        print(f'First result: {results[0].content[:200]}...')
-        if '东莞1号线项目' in results[0].content:
-            print('✅ Test passed: Answer contains expected project name')
-        else:
-            print('❌ Test failed: Answer does not contain expected project name')
-    else:
-        print('❌ Test failed: No results returned')
-
-asyncio.run(test_rag())
-"
-```
-
-**Expected Output:**
-```
-Question: 内解锁接地线线束短，无法安装到紧固螺钉位置是那个项目发生的？
-Results count: 5
-First result: 该问题发生在东莞1号线项目。具体情况：在东莞1号线项目中，发现内解锁接地线线束过短，导致无法正确安装到指定的紧固螺钉位置...
-✅ Test passed: Answer contains expected project name
-```
-
-#### 6. API Endpoint Tests
-
-Test the API endpoints using curl:
-
-```bash
-# Test health check endpoint
-curl "http://localhost:8000/health"
-
-# Test query endpoint
-curl -X POST "http://localhost:8000/api/v1/query" \
-     -H "Content-Type: application/json" \
-     -d '{
-       "question": "德里地铁4期项目(20D21028C000)在故障信息查询中共发生多少起故障？",
-       "context": null,
-       "session_id": "test-session"
-     }'
-```
-
-#### 7. Comprehensive Test Script
-
-Create a comprehensive test script to run all tests:
-
-```bash
-# Create test script
-cat > test_all.py << 'EOF'
-#!/usr/bin/env python3
-"""Comprehensive test script for Kangni Agents"""
-
 import asyncio
 import sys
-import os
+sys.path.insert(0, 'src')
+from test.test_comprehensive import ComprehensiveTestSuite
+async def run_history_tests():
+    suite = ComprehensiveTestSuite()
+    await suite.test_history_service()
+asyncio.run(run_history_tests())
+"
 
-# Add src directory to Python path
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
+# Test only API endpoints
+python -c "
+import asyncio
+import sys
+sys.path.insert(0, 'src')
+from test.test_comprehensive import ComprehensiveTestSuite
+async def run_api_tests():
+    suite = ComprehensiveTestSuite()
+    await suite.test_api_endpoints()
+asyncio.run(run_api_tests())
+"
 
-async def test_service_availability():
-    """Test service availability"""
-    print("Testing service availability...")
-    try:
-        from kangni_agents.main import check_service_availability
-        await check_service_availability()
-        print("✅ Service availability test passed")
-        return True
-    except Exception as e:
-        print(f"❌ Service availability test failed: {e}")
-        return False
-
-async def test_llm_providers():
-    """Test LLM provider configuration"""
-    print("\nTesting LLM providers...")
-    try:
-        from kangni_agents.services.database_service import db_service
-        from kangni_agents.agents.react_agent import kangni_agent
-        
-        if (db_service.llm_provider.value == "deepseek" and 
-            kangni_agent.llm_provider.value == "deepseek"):
-            print("✅ LLM provider test passed (DeepSeek)")
-            return True
-        else:
-            print("❌ LLM provider test failed")
-            return False
-    except Exception as e:
-        print(f"❌ LLM provider test failed: {e}")
-        return False
-
-async def test_specific_question():
-    """Test the specific question"""
-    print("\nTesting specific question...")
-    try:
-        from kangni_agents.services.database_service import db_service
-        
-        question = "德里地铁4期项目(20D21028C000)在故障信息查询中共发生多少起故障？"
-        result = await db_service.query_database(question)
-        
-        if result.get('success') and '5' in str(result.get('results', [])):
-            print("✅ Specific question test passed (result: 5)")
-            return True
-        else:
-            print("❌ Specific question test failed")
-            return False
-    except Exception as e:
-        print(f"❌ Specific question test failed: {e}")
-        return False
-
-async def test_rag_functionality():
-    """Test RAG functionality"""
-    print("\nTesting RAG functionality...")
-    try:
-        from kangni_agents.services.rag_service import rag_service
-        
-        question = "内解锁接地线线束短，无法安装到紧固螺钉位置是那个项目发生的？"
-        results = await rag_service.search_rag(question, 'f3073258886911f08bc30242c0a82006')
-        
-        if results and '东莞1号线项目' in results[0].content:
-            print("✅ RAG functionality test passed")
-            return True
-        else:
-            print("❌ RAG functionality test failed")
-            return False
-    except Exception as e:
-        print(f"❌ RAG functionality test failed: {e}")
-        return False
-
-async def main():
-    """Run all tests"""
-    print("Running comprehensive tests for Kangni Agents...")
-    
-    tests = [
-        test_service_availability(),
-        test_llm_providers(),
-        test_specific_question(),
-        test_rag_functionality()
-    ]
-    
-    results = await asyncio.gather(*tests, return_exceptions=True)
-    
-    passed = sum(1 for r in results if r is True)
-    total = len(results)
-    
-    print(f"\n{'='*50}")
-    print(f"Test Results: {passed}/{total} tests passed")
-    
-    if passed == total:
-        print("🎉 All tests passed! System is working correctly.")
-    else:
-        print("💥 Some tests failed! Please check the configuration.")
-        sys.exit(1)
-
-if __name__ == "__main__":
-    asyncio.run(main())
-EOF
-
-# Run comprehensive tests
-python src/tests/test_all.py
+# Test only user email validation
+python -c "
+import asyncio
+import sys
+sys.path.insert(0, 'src')
+from test.test_comprehensive import ComprehensiveTestSuite
+async def run_validation_tests():
+    suite = ComprehensiveTestSuite()
+    await suite.test_user_email_validation()
+asyncio.run(run_validation_tests())
+"
 ```
 
 ### Test Environment Setup
 
 #### Environment Variables
 
-Ensure your `.env` file contains:
+Create a `.env` file with the following variables:
 
-```env
-# LLM Configuration (DeepSeek as default)
-LLM_BASE_URL=https://api.deepseek.com
-LLM_API_KEY=your_deepseek_api_key
-LLM_CHAT_MODEL=deepseek-chat
+```bash
+# LLM Configuration
+LLM_PROVIDER=deepseek
 DEEPSEEK_API_KEY=your_deepseek_api_key
+OPENAI_API_KEY=your_openai_api_key
+ALIBABA_API_KEY=your_alibaba_api_key
 
 # Database Configuration
-MYSQL_HOST=your_mysql_host
-MYSQL_USER=your_mysql_user
-MYSQL_PASSWORD=your_mysql_password
-MYSQL_DATABASE=your_mysql_database
-MYSQL_PORT=3306
+DB_TYPE=sqlite
+HISTORY_DATABASE_URL=sqlite:///.src/resources/history.db
 
 # RAG Configuration
 RAGFLOW_MCP_SERVER_URL=http://158.58.50.45:9382/mcp
 RAGFLOW_DEFAULT_DATASET_ID=f3073258886911f08bc30242c0a82006
+
+# Logging
+LOG_LEVEL=INFO
+ENVIRONMENT=test
 ```
 
-#### Required Services
+#### Database Setup
 
-1. **RAG MCP Server**: Must be running at `http://158.58.50.45:9382/mcp`
-2. **MySQL Database**: Must be accessible with the configured credentials
-3. **LLM API**: DeepSeek API key must be valid and accessible
+The test suite uses SQLite for testing, which is automatically created:
+
+```bash
+# Database will be created automatically at: ./src/resources/history.db
+# No manual setup required for testing
+```
+
+### Test Results
+
+The comprehensive test suite provides detailed results:
+
+```
+📊 COMPREHENSIVE TEST SUITE SUMMARY
+================================================================================
+Total test categories: 7
+Passed: 7
+Failed: 0
+Success rate: 100.0%
+Total duration: 90.81s
+
+📋 Detailed Results:
+  ✅ PASS History Service (0.25s)
+  ✅ PASS API Endpoints (0.04s)
+  ✅ PASS User Email Validation (0.01s)
+  ✅ PASS Query Preprocessing (0.00s)
+  ✅ PASS LLM Connection (1.76s)
+  ✅ PASS RAG Service (10.08s)
+  ✅ PASS Test Cases Execution (78.66s)
+
+📄 Detailed results saved to: comprehensive_test_results.json
+```
 
 ### Troubleshooting Tests
 
 #### Common Issues
 
-1. **Service Unavailable Errors**:
-   - Check if RAG MCP server is running
-   - Verify database connection credentials
-   - Ensure LLM API key is valid
+1. **Server Not Running**: Some tests require the server to be running
+   ```bash
+   # Start server in background
+   ./dev_server.sh &
+   # Then run tests
+   python src/test/test_comprehensive.py
+   ```
 
-2. **Configuration Errors**:
-   - Verify `.env` file exists and has correct values
-   - Check environment variable names match the configuration
+2. **API Key Issues**: Ensure valid API keys are configured
+   ```bash
+   # Check API key configuration
+   python -c "
+   import sys; sys.path.insert(0, 'src')
+   from kangni_agents.config import settings
+   print(f'DeepSeek API Key: {\"✅ Configured\" if settings.deepseek_api_key else \"❌ Not configured\"}')
+   "
+   ```
 
-3. **Import Errors**:
-   - Ensure you're running tests from the project root directory
-   - Verify all dependencies are installed: `pip install -e .`
+3. **Import Errors**: Ensure you're running tests from the project root directory
+   ```bash
+   # Verify dependencies
+   pip install -e .
+   ```
 
 #### Debug Mode
 
@@ -517,7 +385,7 @@ Run tests with debug information:
 ```bash
 # Enable debug logging
 export LOG_LEVEL=DEBUG
-python src/tests/test_all.py
+python src/test/test_comprehensive.py
 ```
 
 ### Continuous Integration
@@ -528,24 +396,25 @@ For CI/CD pipelines, use the comprehensive test script:
 # Example GitHub Actions workflow
 - name: Run Tests
   run: |
-    python src/tests/test_all.py
+    python src/test/test_comprehensive.py
   env:
     LLM_API_KEY: ${{ secrets.DEEPSEEK_API_KEY }}
-    MYSQL_HOST: ${{ secrets.MYSQL_HOST }}
-    MYSQL_USER: ${{ secrets.MYSQL_USER }}
-    MYSQL_PASSWORD: ${{ secrets.MYSQL_PASSWORD }}
-    MYSQL_DATABASE: ${{ secrets.MYSQL_DATABASE }}
+    RAGFLOW_MCP_SERVER_URL: ${{ secrets.RAGFLOW_URL }}
 ```
+
 
 ### API使用示例
 
 #### 查询接口
+
+**Note: user_email is now REQUIRED for all queries to enable history tracking and feedback features**
 
 ```bash
 curl -X POST "http://localhost:8000/api/v1/query" \
      -H "Content-Type: application/json" \
      -d '{
        "question": "用户总数有多少？",
+       "user_email": "user@example.com",
        "context": null,
        "session_id": "test-session"
      }'
@@ -614,14 +483,8 @@ If port 8000 is busy, modify the port in:
 # Install and setup
 pip install -e .
 
-# Quick test (recommended)
-python run_tests.py quick
-
-# Comprehensive test
-python run_tests.py all
-
-# All tests
-python run_tests.py all-tests
+# Run comprehensive test suite (recommended)
+python src/test/test_comprehensive.py
 
 # Start development server
 ./dev_server.sh
@@ -646,4 +509,4 @@ For issues or questions:
 1. Check the [Testing](#testing) section for troubleshooting
 2. Verify your `.env` file configuration
 3. Ensure all required services are running
-4. Run `python run_tests.py all` to diagnose issues
+4. Run `python src/test/test_comprehensive.py` to diagnose issues

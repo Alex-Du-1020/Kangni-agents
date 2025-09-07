@@ -55,17 +55,6 @@ class LLMService:
             configs.append(config)
             logger.info("Added OpenAI configuration")
         
-        # Anthropic配置
-        anthropic_key = os.getenv("ANTHROPIC_API_KEY")
-        if anthropic_key:
-            configs.append({
-                "provider": LLMProvider.ANTHROPIC,
-                "model_name": os.getenv("ANTHROPIC_MODEL", "claude-3-sonnet-20240229"),
-                "api_key": anthropic_key,
-                "temperature": 0.7
-            })
-            logger.info("Added Anthropic configuration")
-        
         # DeepSeek配置
         deepseek_key = os.getenv("DEEPSEEK_API_KEY")
         if deepseek_key:

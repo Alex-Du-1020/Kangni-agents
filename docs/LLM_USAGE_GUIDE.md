@@ -6,7 +6,6 @@
 
 ### 已实现的提供商
 - **OpenAI** - GPT系列模型
-- **Anthropic** - Claude系列模型  
 - **Ollama** - 本地模型服务
 - **DeepSeek** - DeepSeek系列模型
 
@@ -29,10 +28,6 @@
 OPENAI_API_KEY=your_openai_api_key
 LLM_CHAT_MODEL=gpt-3.5-turbo
 LLM_BASE_URL=https://api.openai.com/v1
-
-# Anthropic配置
-ANTHROPIC_API_KEY=your_anthropic_api_key
-ANTHROPIC_MODEL=claude-3-sonnet-20240229
 
 # DeepSeek配置
 DEEPSEEK_API_KEY=your_deepseek_api_key
@@ -82,7 +77,7 @@ print(response.content)
 ```python
 from src.kangni_agents.models import (
     LLMManager, create_multi_provider_manager, 
-    LLMProvider, LLMMessage, OpenAIConfig, AnthropicConfig
+    LLMProvider, LLMMessage, OpenAIConfig
 )
 
 # 创建多提供商管理器
@@ -92,12 +87,6 @@ configs = [
         "model_name": "gpt-4",
         "api_key": "your_openai_key",
         "temperature": 0.3
-    },
-    {
-        "provider": LLMProvider.ANTHROPIC,  
-        "model_name": "claude-3-sonnet-20240229",
-        "api_key": "your_anthropic_key",
-        "temperature": 0.5
     }
 ]
 
@@ -137,7 +126,6 @@ GET /api/v1/llm/health
   "healthy_providers": 2,
   "providers": {
     "openai": true,
-    "anthropic": true,
     "ollama": false
   }
 }
@@ -245,8 +233,6 @@ config = {
 configs = [
     # 主要提供商
     {"provider": "openai", "model_name": "gpt-4", "api_key": "key1"},
-    # 备用提供商
-    {"provider": "anthropic", "model_name": "claude-3-sonnet", "api_key": "key2"},
     # 本地备用
     {"provider": "ollama", "model_name": "llama2", "base_url": "http://localhost:11434"}
 ]

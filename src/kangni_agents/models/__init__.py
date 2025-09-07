@@ -9,6 +9,7 @@ class QueryType(str, Enum):
 
 class UserQuery(BaseModel):
     question: str
+    user_email: str  # Required for history tracking
     context: Optional[str] = None
     session_id: Optional[str] = None
 

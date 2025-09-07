@@ -19,6 +19,9 @@ class Settings(BaseSettings):
     mysql_database: Optional[str] = None
     mysql_port: int = 3306
     
+    # History database configuration (SQLite for testing)
+    history_database_url: Optional[str] = None  # If not set, will use SQLite
+    
     # API设置
     api_host: str = "0.0.0.0"
     api_port: int = 8000
@@ -36,6 +39,7 @@ class Settings(BaseSettings):
     class Config:
         env_file = ".env"
         populate_by_name = True
+        extra = "ignore"  # Ignore extra fields from .env file
     
     def get_log_level(self) -> str:
         """根据环境获取日志级别"""
