@@ -58,6 +58,25 @@ class CommentResponse(BaseModel):
     created_at: datetime
 
 
+class AdminReviewResponse(BaseModel):
+    id: int
+    session_id: str
+    user_email: Optional[str]
+    question: str
+    answer: Optional[str]
+    sql_query: Optional[str]
+    sources: Optional[List]
+    query_type: Optional[str]
+    success: bool
+    error_message: Optional[str]
+    created_at: datetime
+    processing_time_ms: Optional[int]
+    llm_provider: Optional[str]
+    model_name: Optional[str]
+    feedback_stats: dict  # Contains likes, dislikes, dislike_users
+    comments: List[dict]  # List of comment dictionaries
+
+
 @router.get("/user/{user_email}", response_model=List[HistoryResponse])
 async def get_user_history(
     user_email: str,
@@ -273,5 +292,30 @@ async def get_feedback_stats(query_id: int):
             "query_id": query_id,
             **stats
         }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.get("/admin/dislike-review", response_model=List[AdminReviewResponse])
+async def get_dislike_feedback_review(
+    days: int = Query(default=7, ge=1, le=30, description="Number of days to look back (1, 3, 5, 7, etc.)"),
+    limit: int = Query(default=100, ge=1, le=500)
+):
+    """
+    Get queries with dislike feedback and comments for admin review
+    
+    Args:
+        days: Number of days to look back (1-30)
+        limit: Maximum number of results (1-500)
+    
+    Returns:
+        List of queries with dislike feedback, ordered by created time descending
+    """
+    try:
+        review_data = await history_service.get_dislike_feedback_for_review(
+            days=days,
+            limit=limit
+        )
+        return review_data
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

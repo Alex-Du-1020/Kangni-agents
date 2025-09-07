@@ -475,6 +475,98 @@ class HistoryService:
         except Exception as e:
             logger.error(f"Failed to get recent queries: {e}")
             raise
+    
+    async def get_dislike_feedback_for_review(
+        self,
+        days: int = 7,
+        limit: int = 100
+    ) -> List[Dict[str, Any]]:
+        """
+        Get queries with dislike feedback and their comments for admin review
+        
+        Args:
+            days: Number of days to look back (1, 3, 5, 7, etc.)
+            limit: Maximum number of results
+        
+        Returns:
+            List of query history with dislike feedback and comments
+        """
+        try:
+            with self.db_config.session_scope() as session:
+                cutoff_time = datetime.utcnow() - timedelta(days=days)
+                
+                # Query for all queries that have dislike feedback within the time period
+                query = session.query(QueryHistory).join(
+                    UserFeedback,
+                    QueryHistory.id == UserFeedback.query_id
+                ).filter(
+                    and_(
+                        UserFeedback.feedback_type == FeedbackType.DISLIKE,
+                        QueryHistory.created_at >= cutoff_time
+                    )
+                ).order_by(desc(QueryHistory.created_at))
+                
+                if limit:
+                    query = query.limit(limit)
+                
+                results = query.all()
+                
+                # Convert to dictionaries and fetch related data
+                review_data = []
+                for item in results:
+                    # Get all feedback for this query
+                    feedback_items = session.query(UserFeedback).filter(
+                        UserFeedback.query_id == item.id
+                    ).all()
+                    
+                    # Get all comments for this query
+                    comments = session.query(UserComment).filter(
+                        UserComment.query_id == item.id
+                    ).order_by(desc(UserComment.created_at)).all()
+                    
+                    # Count likes and dislikes
+                    likes = sum(1 for f in feedback_items if f.feedback_type == FeedbackType.LIKE)
+                    dislikes = sum(1 for f in feedback_items if f.feedback_type == FeedbackType.DISLIKE)
+                    
+                    # Get list of users who disliked
+                    dislike_users = [f.user_email for f in feedback_items 
+                                   if f.feedback_type == FeedbackType.DISLIKE]
+                    
+                    review_data.append({
+                        "id": item.id,
+                        "session_id": item.session_id,
+                        "user_email": item.user_email,
+                        "question": item.question,
+                        "answer": item.answer,
+                        "sql_query": item.sql_query,
+                        "sources": item.sources,
+                        "query_type": item.query_type,
+                        "success": item.success,
+                        "error_message": item.error_message,
+                        "created_at": item.created_at.isoformat() if item.created_at else None,
+                        "processing_time_ms": item.processing_time_ms,
+                        "llm_provider": item.llm_provider,
+                        "model_name": item.model_name,
+                        "feedback_stats": {
+                            "likes": likes,
+                            "dislikes": dislikes,
+                            "dislike_users": dislike_users
+                        },
+                        "comments": [
+                            {
+                                "id": c.id,
+                                "user_email": c.user_email,
+                                "comment": c.comment,
+                                "created_at": c.created_at.isoformat() if c.created_at else None
+                            } for c in comments
+                        ]
+                    })
+                
+                logger.info(f"Retrieved {len(review_data)} queries with dislike feedback from last {days} days")
+                return review_data
+        except Exception as e:
+            logger.error(f"Failed to get dislike feedback for review: {e}")
+            raise
 
 
 # Global history service instance
