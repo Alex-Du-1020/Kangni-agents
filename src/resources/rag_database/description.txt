@@ -1148,3 +1148,47 @@ update_by：更新人，记录的最后更新者
 update_date：更新时间，记录最后更新的时间
 tenant_id：租户ID，租户的唯一标识
 
+### 质量知识库（kn_quality_knowledge_base）
+该表存储质量相关的知识信息，主要包含项目名称、平台、故障零部件、故障模式、维护活动类型等字段。详细的字段包含：
+id：主键，用于唯一标识每条记录
+project_name：项目名称，记录相关的项目信息
+platform_name：平台，记录所属平台信息
+fault_components：故障零部件，记录发生故障的零部件
+fault_model：故障模式，描述故障的具体模式
+maintenance_activities_type：维护活动类型，记录维护活动的分类
+on_site_disposal_desc：现场处置描述，详细记录现场处理情况
+reason_classification：原因分类，对故障原因进行分类
+reason_detail_rule：原因细则，详细说明故障原因
+corrective_action：纠正措施，记录采取的纠正措施
+cause_confidence：原因置信度(%)，表示对原因判断的可信度
+xc_act_confidence：维护活动置信度(%)，表示对维护活动判断的可信度
+risk_check_item_id：质量风险清单库id，关联风险检查项
+create_by：创建人，记录创建者的姓名
+create_time：创建日期，记录创建时间
+update_by：更新人，记录最后更新者
+update_time：更新日期，记录最后更新时间
+
+### 2. 维保周期质量预警（kn_quality_maintenance_warning）
+该表用于存储维保周期质量预警信息，主要包含项目编码、项目名称、火车类型、采集时间等字段。详细的字段包含：
+id：主键，用于唯一标识每条预警记录
+project_code：项目编码，标识相关项目的编码
+project_name：项目名称，记录项目名称信息
+train_type：火车类型，1:城轨，2:动车组，3:复兴号
+fill_in_date：采集时间，记录数据采集的时间
+run_distance：平均运行公里数，记录车辆运行的平均距离
+start_online_time：车辆上线日期，记录车辆开始运行的时间
+failure_number：故障次数，统计故障发生的次数
+warning_type：预警类型，0：最新数据，1:运行公里数，2:起运日期
+calculation_range：计算范围，用于预警计算的范围
+send_warning_status：发送预警状态，0：无，1:待发送，2:已发送
+send_time：预警发送时间，记录预警发送的具体时间
+create_time：创建时间，记录记录创建时间
+update_time：更新时间，记录记录更新时间
+failure_rate：千套门故障率，计算得出的故障率
+calculation_range_name：计算范围名称，描述计算范围的名称
+door_number：车门数，记录车辆的车门数量
+send_user_id：发送对象工号，记录预警接收者的工号
+send_user_name：发送对象姓名，记录预警接收者的姓名
+fault_report_codes：相关故障报告编码，使用逗号分隔存储相关故障报告编码
+
+

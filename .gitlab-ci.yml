@@ -16,8 +16,6 @@ variables:
   ALIBABA_REGISTRY: crpi-l3yyk3n2aniyegyy.cn-hangzhou.personal.cr.aliyuncs.com
   DOCKER_IMAGE_NAME: kangni_zhongzhi/kangni_ai
   DOCKER_IMAGE_TAG: $CI_COMMIT_SHORT_SHA
-  ALIBABA_ACCESS_KEY_ID: LTAI5tRfYCXUtbtk2B8FAkCX
-  ALIBABA_ACCESS_KEY_SECRET: DZ51dA7wcDJ7cPTXA6y2mGlE7c5NX7
   
   # 使用 GitLab CI 内置变量
   DOCKER_DRIVER: overlay2
