@@ -58,6 +58,11 @@ class CommentResponse(BaseModel):
     created_at: datetime
 
 
+class DislikeComment(BaseModel):
+    user_email: str
+    comment: str
+    created_at: datetime
+
 class AdminReviewResponse(BaseModel):
     id: int
     session_id: str
@@ -73,8 +78,7 @@ class AdminReviewResponse(BaseModel):
     processing_time_ms: Optional[int]
     llm_provider: Optional[str]
     model_name: Optional[str]
-    feedback_stats: dict  # Contains likes, dislikes, dislike_users
-    comments: List[dict]  # List of comment dictionaries
+    feedback_stats: List[DislikeComment]  # Array of dislike comments with user info
 
 
 @router.get("/user/{user_email}", response_model=List[HistoryResponse])
@@ -265,14 +269,6 @@ async def add_comment(comment: CommentRequest):
         }
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
-
-class CommentResponse(BaseModel):
-    id: int
-    query_id: int
-    user_email: str
-    comment: str
-    created_at: datetime
 
 
 @router.get("/feedback/stats/{query_id}", response_model=FeedbackStatsResponse)

@@ -514,23 +514,34 @@ class HistoryService:
                 # Convert to dictionaries and fetch related data
                 review_data = []
                 for item in results:
-                    # Get all feedback for this query
-                    feedback_items = session.query(UserFeedback).filter(
-                        UserFeedback.query_id == item.id
+                    # Get dislike feedback for this query
+                    dislike_feedback = session.query(UserFeedback).filter(
+                        and_(
+                            UserFeedback.query_id == item.id,
+                            UserFeedback.feedback_type == FeedbackType.DISLIKE
+                        )
                     ).all()
                     
-                    # Get all comments for this query
-                    comments = session.query(UserComment).filter(
-                        UserComment.query_id == item.id
-                    ).order_by(desc(UserComment.created_at)).all()
+                    # Get comments from users who gave dislike feedback
+                    dislike_users = [f.user_email for f in dislike_feedback]
+                    dislike_comments = []
                     
-                    # Count likes and dislikes
-                    likes = sum(1 for f in feedback_items if f.feedback_type == FeedbackType.LIKE)
-                    dislikes = sum(1 for f in feedback_items if f.feedback_type == FeedbackType.DISLIKE)
-                    
-                    # Get list of users who disliked
-                    dislike_users = [f.user_email for f in feedback_items 
-                                   if f.feedback_type == FeedbackType.DISLIKE]
+                    if dislike_users:
+                        # Get comments from users who gave dislike feedback
+                        comments = session.query(UserComment).filter(
+                            and_(
+                                UserComment.query_id == item.id,
+                                UserComment.user_email.in_(dislike_users)
+                            )
+                        ).order_by(desc(UserComment.created_at)).all()
+                        
+                        dislike_comments = [
+                            {
+                                "user_email": c.user_email,
+                                "comment": c.comment,
+                                "created_at": c.created_at
+                            } for c in comments
+                        ]
                     
                     review_data.append({
                         "id": item.id,
@@ -543,23 +554,11 @@ class HistoryService:
                         "query_type": item.query_type,
                         "success": item.success,
                         "error_message": item.error_message,
-                        "created_at": item.created_at.isoformat() if item.created_at else None,
+                        "created_at": item.created_at,
                         "processing_time_ms": item.processing_time_ms,
                         "llm_provider": item.llm_provider,
                         "model_name": item.model_name,
-                        "feedback_stats": {
-                            "likes": likes,
-                            "dislikes": dislikes,
-                            "dislike_users": dislike_users
-                        },
-                        "comments": [
-                            {
-                                "id": c.id,
-                                "user_email": c.user_email,
-                                "comment": c.comment,
-                                "created_at": c.created_at.isoformat() if c.created_at else None
-                            } for c in comments
-                        ]
+                        "feedback_stats": dislike_comments
                     })
                 
                 logger.info(f"Retrieved {len(review_data)} queries with dislike feedback from last {days} days")

@@ -29,7 +29,6 @@ build-image:
   tags:
     - build
   before_script:
-    - apk add --no-cache curl
     - docker info
   script:
     - echo "开始构建 Docker 镜像..."

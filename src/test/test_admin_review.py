@@ -127,19 +127,41 @@ async def test_admin_review_endpoint():
                 print(f"  Question: {item['question'][:50]}...")
                 print(f"  User: {item['user_email']}")
                 print(f"  Created: {item['created_at']}")
-                print(f"  Feedback: {item['feedback_stats']['likes']} likes, "
-                      f"{item['feedback_stats']['dislikes']} dislikes")
-                print(f"  Disliked by: {', '.join(item['feedback_stats']['dislike_users'])}")
                 
-                if item['comments']:
-                    print(f"  Comments ({len(item['comments'])}):")
-                    for comment in item['comments']:
+                # feedback_stats is now an array of dislike comments
+                dislike_comments = item['feedback_stats']
+                print(f"  Dislike Comments ({len(dislike_comments)}):")
+                
+                if dislike_comments:
+                    for comment in dislike_comments:
                         print(f"    - {comment['user_email']}: {comment['comment'][:60]}...")
+                        print(f"      Created: {comment['created_at']}")
                 else:
-                    print("  No comments")
+                    print("    No dislike comments")
                     
         except Exception as e:
             print(f"  ❌ Error: {e}")
+    
+    # Test the new structure specifically
+    print(f"\n🔬 Testing New Structure Validation...")
+    try:
+        review_data = await history_service.get_dislike_feedback_for_review(days=7, limit=5)
+        
+        for item in review_data:
+            # Validate that feedback_stats is a list
+            assert isinstance(item['feedback_stats'], list), f"feedback_stats should be a list, got {type(item['feedback_stats'])}"
+            
+            # Validate each comment has required fields
+            for comment in item['feedback_stats']:
+                assert 'user_email' in comment, "Comment missing user_email"
+                assert 'comment' in comment, "Comment missing comment text"
+                assert 'created_at' in comment, "Comment missing created_at"
+                print(f"  ✓ Validated comment structure for query {item['id']}")
+                
+        print("  ✅ New structure validation passed!")
+        
+    except Exception as e:
+        print(f"  ❌ Structure validation error: {e}")
     
     print("\n" + "=" * 60)
     print("✅ Admin Review Endpoint Test Complete!")
@@ -169,7 +191,10 @@ async def test_api_endpoint():
                     
                     if data:
                         print(f"  Sample: {data[0]['question'][:40]}...")
-                        print(f"  Dislikes: {data[0]['feedback_stats']['dislikes']}")
+                        dislike_comments = data[0]['feedback_stats']
+                        print(f"  Dislike Comments: {len(dislike_comments)}")
+                        if dislike_comments:
+                            print(f"    First comment: {dislike_comments[0]['comment'][:40]}...")
                 else:
                     print(f"❌ API returned status {response.status_code}")
                     print(f"   Response: {response.text}")
@@ -200,7 +225,8 @@ async def main():
     print("The admin review endpoint allows filtering by:")
     print("  • Days: 1, 3, 5, 7 (or any value 1-30)")
     print("  • Returns: Queries with dislikes, ordered by created time")
-    print("  • Includes: Feedback stats and all comments")
+    print("  • feedback_stats: Array of dislike comments from users who gave dislike feedback")
+    print("  • Only includes comments from users who disliked the query")
     print("\nEndpoint: GET /api/v1/history/admin/dislike-review")
     print("Parameters: ?days=7&limit=100")
 
