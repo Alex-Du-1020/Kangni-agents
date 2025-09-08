@@ -1,0 +1,99 @@
+# Kangni Agents GitLab CI/CD Pipeline
+# 自动构建和推送 Docker 镜像到阿里云容器镜像服务
+
+# 使用官方 GitLab CI/CD 镜像作为构建环境
+image: docker:latest
+
+services:
+  - docker:dind
+
+stages:
+  - build
+  - push
+
+variables:
+  # 阿里云容器镜像服务配置
+  ALIBABA_REGISTRY: crpi-l3yyk3n2aniyegyy.cn-hangzhou.personal.cr.aliyuncs.com
+  DOCKER_IMAGE_NAME: kangni_zhongzhi/kangni_ai
+  DOCKER_IMAGE_TAG: $CI_COMMIT_SHORT_SHA
+  
+  # 使用 GitLab CI 内置变量
+  DOCKER_DRIVER: overlay2
+  DOCKER_TLS_CERTDIR: ""
+
+# 构建 Docker 镜像
+build-image:
+  stage: build
+  before_script:
+    # 安装必要的工具
+    - apk add --no-cache curl
+    # 配置 Docker 构建环境
+    - docker info
+  script:
+    - echo "开始构建 Docker 镜像..."
+    - echo "镜像名称: $DOCKER_IMAGE_NAME"
+    - echo "镜像标签: $DOCKER_IMAGE_TAG"
+    - echo "提交 SHA: $CI_COMMIT_SHA"
+    
+    # 构建 Docker 镜像
+    - docker build -t $DOCKER_IMAGE_NAME:$DOCKER_IMAGE_TAG .
+    - docker build -t $DOCKER_IMAGE_NAME:latest .
+    
+    # 显示镜像信息
+    - docker images | grep $DOCKER_IMAGE_NAME
+    
+    - echo "Docker 镜像构建完成!"
+    - echo "DOCKER_IMAGE_NAME=$DOCKER_IMAGE_NAME" >> build.env
+    - echo "DOCKER_IMAGE_TAG=$DOCKER_IMAGE_TAG" >> build.env
+  artifacts:
+    reports:
+      dotenv: build.env
+  only:
+    - main
+
+# 推送镜像到阿里云容器镜像服务
+push-to-registry:
+  stage: push
+  before_script:
+    # 安装阿里云 CLI 工具
+    - apk add --no-cache python3 py3-pip
+    - pip3 install aliyuncli
+    - pip3 install aliyun-python-sdk-cr
+    
+    # 配置阿里云认证
+    - echo "配置阿里云容器镜像服务认证..."
+    - aliyun configure set --profile default --mode AK --region cn-hangzhou --access-key-id $ALIBABA_ACCESS_KEY_ID --access-key-secret $ALIBABA_ACCESS_KEY_SECRET
+    
+    # 获取临时登录令牌
+    - echo "获取临时登录令牌..."
+    - TOKEN=$(aliyun cr GetAuthorizationToken --region cn-hangzhou --output text --query 'data.authorizationToken')
+    - USERNAME=$(echo $TOKEN | cut -d':' -f1)
+    - PASSWORD=$(echo $TOKEN | cut -d':' -f2)
+    
+    # 登录到阿里云容器镜像服务
+    - echo "登录到阿里云容器镜像服务..."
+    - echo $PASSWORD | docker login $ALIBABA_REGISTRY -u $USERNAME --password-stdin
+    
+  script:
+    - echo "开始推送 Docker 镜像到阿里云容器镜像服务..."
+    - echo "目标仓库: $ALIBABA_REGISTRY"
+    - echo "镜像名称: $DOCKER_IMAGE_NAME"
+    - echo "镜像标签: $DOCKER_IMAGE_TAG"
+    
+    # 标记镜像
+    - docker tag $DOCKER_IMAGE_NAME:$DOCKER_IMAGE_TAG $ALIBABA_REGISTRY/$DOCKER_IMAGE_NAME:$DOCKER_IMAGE_TAG
+    - docker tag $DOCKER_IMAGE_NAME:latest $ALIBABA_REGISTRY/$DOCKER_IMAGE_NAME:latest
+    
+    # 推送镜像
+    - docker push $ALIBABA_REGISTRY/$DOCKER_IMAGE_NAME:$DOCKER_IMAGE_TAG
+    - docker push $ALIBABA_REGISTRY/$DOCKER_IMAGE_NAME:latest
+    
+    echo "Docker 镜像推送完成!"
+    echo "镜像地址: $ALIBABA_REGISTRY/$DOCKER_IMAGE_NAME:$DOCKER_IMAGE_TAG"
+    echo "最新镜像: $ALIBABA_REGISTRY/$DOCKER_IMAGE_NAME:latest"
+    
+  dependencies:
+    - build-image
+  only:
+    - main
+  when: on_success
