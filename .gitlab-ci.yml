@@ -26,6 +26,8 @@ variables:
 # 构建 Docker 镜像
 build-image:
   stage: build
+  tags:
+    - build
   before_script:
     - apk add --no-cache curl
     - docker info
@@ -48,6 +50,8 @@ build-image:
 # 推送镜像到阿里云容器镜像服务
 push-to-registry:
   stage: push
+  tags:
+    - docker
   before_script:
     - apk add --no-cache python3 py3-pip
     - pip3 install aliyuncli
