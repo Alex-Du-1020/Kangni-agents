@@ -16,11 +16,19 @@ class RAGFlowService:
     async def check_availability(self) -> bool:
         """检查RAG服务是否可用"""
         try:
-            async with streamablehttp_client(self.base_url) as (read_stream, write_stream, _):
-                async with ClientSession(read_stream, write_stream) as session:
-                    await session.initialize()
-                    logger.info("RAG service connection test successful")
-                    return True
+            # Add timeout for connection check
+            async def _check_connection():
+                async with streamablehttp_client(self.base_url) as (read_stream, write_stream, _):
+                    async with ClientSession(read_stream, write_stream) as session:
+                        await session.initialize()
+                        logger.info("RAG service connection test successful")
+                        return True
+            
+            # Wait max 5 seconds for connection
+            return await asyncio.wait_for(_check_connection(), timeout=5.0)
+        except asyncio.TimeoutError:
+            logger.warning(f"RAG service connection test timed out after 5 seconds")
+            return False
         except Exception as e:
             logger.error(f"RAG service connection test failed: {e}")
             return False
@@ -28,96 +36,103 @@ class RAGFlowService:
     async def search_rag(self, query: str, dataset_id: str, top_k: int = 5) -> List[RAGSearchResult]:
         """调用RAGFlow MCP服务进行文档搜索"""
         try:
-            async with streamablehttp_client(self.base_url) as (read_stream, write_stream, _):
-                async with ClientSession(read_stream, write_stream) as session:
-                    await session.initialize()
+            async def _do_search():
+                async with streamablehttp_client(self.base_url) as (read_stream, write_stream, _):
+                    async with ClientSession(read_stream, write_stream) as session:
+                        await session.initialize()
 
-                    # 调用MCP工具
-                    response = await session.call_tool(
-                        name="ragflow_retrieval",
-                        arguments={
-                            "dataset_ids": [dataset_id],
-                            "question": query,
-                            "top_k": top_k
-                        }
-                    )
+                        # 调用MCP工具
+                        response = await session.call_tool(
+                            name="ragflow_retrieval",
+                            arguments={
+                                "dataset_ids": [dataset_id],
+                                "question": query,
+                                "top_k": top_k
+                            }
+                        )
+                        return response
+            
+            # Add timeout for search operation (30 seconds)
+            response = await asyncio.wait_for(_do_search(), timeout=30.0)
                     
-                    # 解析结果 - 处理MCP TextContent响应格式
-                    content = []
-                    if hasattr(response, 'content') and response.content:
-                        # 处理TextContent对象列表
-                        if isinstance(response.content, list):
-                            for text_content in response.content:
-                                if hasattr(text_content, 'text'):
-                                    try:
-                                        # 解析JSON文本内容
-                                        parsed_data = json.loads(text_content.text)
-                                        if isinstance(parsed_data, dict) and 'chunks' in parsed_data:
-                                            # 处理chunks数组
-                                            chunks = parsed_data['chunks']
-                                            for chunk in chunks:
-                                                if isinstance(chunk, dict):
-                                                    content.append(chunk)
-                                        elif isinstance(parsed_data, list):
-                                            # 直接是数组格式
-                                            content.extend(parsed_data)
-                                        else:
-                                            # 单个对象
-                                            content.append(parsed_data)
-                                    except json.JSONDecodeError:
-                                        # 如果不是JSON，作为普通文本处理
-                                        content.append({"content": text_content.text, "score": 1.0})
+            # 解析结果 - 处理MCP TextContent响应格式
+            content = []
+            if hasattr(response, 'content') and response.content:
+                # 处理TextContent对象列表
+                if isinstance(response.content, list):
+                    for text_content in response.content:
+                        if hasattr(text_content, 'text'):
+                            try:
+                                # 解析JSON文本内容
+                                parsed_data = json.loads(text_content.text)
+                                if isinstance(parsed_data, dict) and 'chunks' in parsed_data:
+                                    # 处理chunks数组
+                                    chunks = parsed_data['chunks']
+                                    for chunk in chunks:
+                                        if isinstance(chunk, dict):
+                                            content.append(chunk)
+                                elif isinstance(parsed_data, list):
+                                    # 直接是数组格式
+                                    content.extend(parsed_data)
                                 else:
-                                    # 直接是字符串
-                                    content.append({"content": str(text_content), "score": 1.0})
-                        elif isinstance(response.content, str):
+                                    # 单个对象
+                                    content.append(parsed_data)
+                            except json.JSONDecodeError:
+                                # 如果不是JSON，作为普通文本处理
+                                content.append({"content": text_content.text, "score": 1.0})
+                        else:
+                            # 直接是字符串
+                            content.append({"content": str(text_content), "score": 1.0})
+                elif isinstance(response.content, str):
                             try:
                                 content = json.loads(response.content)
                                 if not isinstance(content, list):
                                     content = [content]
                             except json.JSONDecodeError:
                                 content = [{"content": response.content, "score": 1.0}]
-                    
-                    # Debug logging for RAG retrieve results
-                    try:
-                        logger.debug(f"RAG retrieve raw response: {json.dumps(content, ensure_ascii=False, indent=2)}")
-                    except (TypeError, ValueError) as e:
-                        logger.debug(f"RAG retrieve raw response (non-serializable): {content}")
+            
+            # Debug logging for RAG retrieve results
+            try:
+                logger.debug(f"RAG retrieve raw response: {json.dumps(content, ensure_ascii=False, indent=2)}")
+            except (TypeError, ValueError) as e:
+                logger.debug(f"RAG retrieve raw response (non-serializable): {content}")
 
-                    search_results = []
-                    for i, item in enumerate(content):
-                        if isinstance(item, dict):
-                            # 提取内容、评分和元数据
-                            item_content = item.get("content", "")
-                            item_score = item.get("similarity", item.get("score", 0.0))
-                            item_metadata = {
-                                "document_id": item.get("document_id", ""),
-                                "document_name": item.get("document_name", ""),
-                                "dataset_name": item.get("dataset_name", ""),
-                                "highlight": item.get("highlight", ""),
-                                "positions": item.get("positions", []),
-                                "vector_similarity": item.get("vector_similarity", 0.0),
-                                "term_similarity": item.get("term_similarity", 0.0)
-                            }
-                            
-                            result = RAGSearchResult(
-                                content=item_content,
-                                score=float(item_score),
-                                metadata=item_metadata
-                            )
-                            search_results.append(result)
-                            logger.debug(f"RAG result {i+1}: score={result.score}, content_preview={result.content[:100]}...")
-                        elif isinstance(item, str):
-                            result = RAGSearchResult(
-                                content=item,
-                                score=1.0
-                            )
-                            search_results.append(result)
-                            logger.debug(f"RAG result {i+1}: score={result.score}, content_preview={result.content[:100]}...")
+            search_results = []
+            for i, item in enumerate(content):
+                if isinstance(item, dict):
+                    # 提取内容、评分和元数据
+                    item_content = item.get("content", "")
+                    item_score = item.get("similarity", item.get("score", 0.0))
+                    item_metadata = {
+                        "document_id": item.get("document_id", ""),
+                        "document_name": item.get("document_name", ""),
+                        "dataset_name": item.get("dataset_name", ""),
+                        "highlight": item.get("highlight", ""),
+                        "positions": item.get("positions", []),
+                        "vector_similarity": item.get("vector_similarity", 0.0),
+                        "term_similarity": item.get("term_similarity", 0.0)
+                    }
                     
-                    logger.debug(f"RAG retrieve completed: {len(search_results)} results found for query: {query}")
-                    return search_results
-                    
+                    result = RAGSearchResult(
+                        content=item_content,
+                        score=float(item_score),
+                        metadata=item_metadata
+                    )
+                    search_results.append(result)
+                    logger.debug(f"RAG result {i+1}: score={result.score}, content_preview={result.content[:100]}...")
+                elif isinstance(item, str):
+                    result = RAGSearchResult(
+                        content=item,
+                        score=1.0
+                    )
+                    search_results.append(result)
+                    logger.debug(f"RAG result {i+1}: score={result.score}, content_preview={result.content[:100]}...")
+            
+            logger.debug(f"RAG retrieve completed: {len(search_results)} results found for query: {query}")
+            return search_results
+        except asyncio.TimeoutError:
+            logger.error(f"RAG search timed out after 30 seconds for query: {query}")
+            raise RuntimeError("RAG service timeout")
         except Exception as e:
             logger.error(f"Error searching RAG: {e}")
             raise RuntimeError(f"RAG service unavailable: {str(e)}")

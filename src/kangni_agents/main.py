@@ -1,10 +1,13 @@
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, HTMLResponse
 from contextlib import asynccontextmanager
 import logging
 import sys
 import asyncio
+import os
+from fastapi.openapi.docs import get_swagger_ui_html
+from fastapi.staticfiles import StaticFiles
 
 from .config import settings
 from .api.routes import router
@@ -101,8 +104,26 @@ def create_app() -> FastAPI:
         title="Kangni Agents",
         description="Industrial-grade FastAPI backend agent for Q&A with RAG and database integration",
         version="0.1.0",
-        lifespan=lifespan
+        lifespan=lifespan,
+        docs_url=None,  # Disable default docs to use custom
+        redoc_url=None  # Disable redoc
     )
+
+    # Mount static files directory
+    static_dir = os.path.join(os.path.dirname(__file__), "static")
+    if os.path.exists(static_dir):
+        app.mount("/static", StaticFiles(directory=static_dir), name="static")
+        logger.info(f"Mounted static files from {static_dir}")
+    
+    # Custom Swagger UI with local assets
+    @app.get("/docs", include_in_schema=False)
+    async def custom_swagger_ui_html():
+        return get_swagger_ui_html(
+            openapi_url=app.openapi_url,
+            title=app.title + " - Swagger UI",
+            swagger_js_url="/static/swagger-ui/swagger-ui-bundle.js",
+            swagger_css_url="/static/swagger-ui/swagger-ui.css",
+        )
     
     # CORS中间件
     app.add_middleware(
@@ -149,7 +170,7 @@ def create_app() -> FastAPI:
                 status_code=503,
                 detail=f"Service unavailable: {str(e)}"
             )
-    
+
     return app
 
 app = create_app()
