@@ -13,6 +13,20 @@ if [ -f .env ]; then
     export $(grep -v '^#' .env | xargs)
 fi
 
+# Run database migrations
+echo "Running database migrations..."
+alembic upgrade head
+
+if [ $? -ne 0 ]; then
+    echo "Migration failed. Attempting to fix database..."
+    # Try to fix database by dropping and recreating tables
+    python fix_database.py
+    if [ $? -ne 0 ]; then
+        echo "Failed to fix database. Exiting."
+        exit 1
+    fi
+fi
+
 # Start the production server
 echo "Starting Kangni Agents production server..."
 echo "Virtual environment: $(which python)"

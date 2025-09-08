@@ -14,6 +14,10 @@ RUN apt-get update && apt-get install -y \
 COPY pyproject.toml ./
 COPY src/ ./src/
 COPY prod_server.sh ./
+COPY alembic.ini ./
+COPY alembic ./alembic/
+COPY fix_database.py ./
+
 
 # Create virtual environment
 RUN python -m venv .venv
