@@ -11,7 +11,7 @@ from ..services.llm_service import llm_service
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/v1/embeddings", tags=["embeddings"])
+router = APIRouter(prefix="/qomo/v1/embeddings", tags=["embeddings"])
 
 # Initialize the vector embedding service
 vector_service = None

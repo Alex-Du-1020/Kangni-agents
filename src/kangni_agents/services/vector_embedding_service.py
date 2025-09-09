@@ -14,6 +14,7 @@ from datetime import datetime
 from ..models.vector_embedding import FieldValueEmbedding, RecordFieldMapping
 from ..services.llm_service import LLMService
 from ..services.database_service import DatabaseService
+from ..config import settings
 
 logger = logging.getLogger(__name__)
 
@@ -68,7 +69,7 @@ class VectorEmbeddingService:
             
             # BGE-M3 embedding model configuration
             embedding_base_url = os.getenv('EMBEDDING_BASE_URL', 'http://158.158.4.66:4432/v1')
-            embedding_api_key = os.getenv('EMBEDDING_API_KEY', 'test')
+            embedding_api_key = getattr(settings, 'embedding_api_key', None) or os.getenv('EMBEDDING_API_KEY')
             
             # Prepare request to BGE-M3 embedding API
             headers = {

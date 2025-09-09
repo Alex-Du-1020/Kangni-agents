@@ -31,6 +31,7 @@ class Settings(BaseSettings):
     openai_api_key: Optional[str] = Field(default=None, alias="OPENAI_API_KEY")
     deepseek_api_key: Optional[str] = Field(default=None, alias="DEEPSEEK_API_KEY")
     alibaba_api_key: Optional[str] = Field(default=None, alias="ALIBABA_API_KEY")
+    embedding_api_key: Optional[str] = Field(default=None, alias="EMBEDDING_API_KEY")
     
     # 日志设置
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
@@ -43,8 +44,6 @@ class Settings(BaseSettings):
     
     def get_log_level(self) -> str:
         """根据环境获取日志级别"""
-        if self.environment.lower() == "development" or self.environment.lower() == "dev":
-            return "DEBUG"
         return self.log_level.upper()
 
 settings = Settings()
