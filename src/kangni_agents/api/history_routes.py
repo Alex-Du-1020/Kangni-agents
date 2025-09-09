@@ -9,7 +9,7 @@ from datetime import datetime
 from ..services.history_service import history_service
 from ..models.history import QueryHistory
 
-router = APIRouter(prefix="/api/v1/history", tags=["history"])
+router = APIRouter(prefix="/qomo/v1/history", tags=["history"])
 
 
 # Request/Response models

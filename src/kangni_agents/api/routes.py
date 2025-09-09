@@ -17,7 +17,7 @@ except ImportError as e:
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/api/v1", tags=["query"])
+router = APIRouter(prefix="/qomo/v1", tags=["query"])
 
 async def _save_query_history(
     query: UserQuery,
