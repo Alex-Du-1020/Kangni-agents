@@ -76,17 +76,102 @@ async def rag_search_tool(query: str, dataset_id: Optional[str] = None) -> Dict[
     }
 
 @tool 
-async def database_query_tool(question: str) -> Dict[str, Any]:
-    """查询数据库获取统计信息"""
+async def database_query_tool(question: str, use_vector_search: bool = True) -> Dict[str, Any]:
+    """查询数据库获取统计信息，支持向量搜索增强"""
+    # 首次尝试直接查询
     result = await db_service.query_database(question)
     
+    # 如果查询成功且有结果，直接返回
+    if result.get("success") and result.get("results"):
+        logger.info("First query successful with results")
+        return format_db_results(result)
+    
+    # 如果查询失败或无结果，且启用了向量搜索，尝试使用向量搜索改进查询
+    if use_vector_search:
+        logger.info("First query returned no results, attempting vector search enhancement")
+        
+        try:
+            from ..services.vector_embedding_service import VectorEmbeddingService
+            from ..services.llm_service import llm_service as embedding_llm_service
+            
+            vector_service = VectorEmbeddingService(db_service, embedding_llm_service)
+            
+            # 尝试多个可能的表和字段组合
+            enhancement_attempts = [
+                {
+                    "keywords": ["订单", "生产订单", "项目", "工单"],
+                    "table": "kn_quality_trace_prod_order",
+                    "field": "projectname_s",
+                    "description": "项目名称"
+                },
+                {
+                    "keywords": ["客户", "客户名称", "用户"],
+                    "table": "kn_quality_trace_prod_order",
+                    "field": "customername_s",
+                    "description": "客户名称"
+                },
+                {
+                    "keywords": ["产品", "物料", "型号"],
+                    "table": "kn_quality_trace_prod_order",
+                    "field": "productcode_s",
+                    "description": "产品代码"
+                }
+            ]
+            
+            enhanced_successfully = False
+            for attempt in enhancement_attempts:
+                # 检查问题是否包含相关关键词
+                if any(keyword in question for keyword in attempt["keywords"]):
+                    logger.info(f"Trying vector search for {attempt['description']}")
+                    
+                    # 获取相关的字段值建议
+                    suggestions = await vector_service.get_field_values_for_query(
+                        query_text=question,
+                        table_name=attempt["table"],
+                        field_name=attempt["field"]
+                    )
+                    
+                    if suggestions:
+                        logger.info(f"Got {len(suggestions)} suggestions for {attempt['description']}: {suggestions[:3]}")
+                        
+                        # 构建增强的问题，包含所有建议值
+                        enhanced_question = f"{question}\n\n重要提示：数据库中{attempt['description']}的实际值包括：{', '.join(suggestions[:5])}\n请使用这些准确的值重新生成SQL查询。"
+                        
+                        # 重新尝试查询
+                        enhanced_result = await db_service.query_database(enhanced_question)
+                        
+                        if enhanced_result.get("success") and enhanced_result.get("results"):
+                            logger.info(f"Query successful with vector search suggestions for {attempt['description']}")
+                            enhanced_result["vector_enhanced"] = True
+                            enhanced_result["suggestions_used"] = suggestions[:5]
+                            enhanced_result["enhancement_type"] = attempt['description']
+                            return format_db_results(enhanced_result)
+                        else:
+                            logger.info(f"Enhanced query still returned no results for {attempt['description']}")
+                    else:
+                        logger.info(f"No vector suggestions found for {attempt['description']}")
+                    
+        except Exception as e:
+            logger.warning(f"Error using vector search enhancement: {e}")
+    
+    # 如果所有尝试都失败，返回原始结果
     if not result.get("success"):
         return {
             "content": f"数据库查询失败: {result.get('error', '未知错误')}",
             "sql_query": None,
-            "results": []
+            "results": [],
+            "message": "查询失败，可能是SQL语法错误或表/字段不存在"
         }
-    
+    else:
+        return {
+            "content": "查询成功但未找到匹配的数据",
+            "sql_query": result.get("sql_query"),
+            "results": [],
+            "message": "SQL执行成功但没有返回数据，可能需要检查查询条件"
+        }
+
+def format_db_results(result: Dict[str, Any]) -> Dict[str, Any]:
+    """格式化数据库查询结果"""
     # 处理日期序列化问题
     def serialize_dates(obj):
         """递归处理对象中的日期类型，转换为字符串"""
@@ -105,7 +190,9 @@ async def database_query_tool(question: str) -> Dict[str, Any]:
     try:
         formatted_content = json.dumps({
             "sql_query": result.get("sql_query"),
-            "results": serialized_results
+            "results": serialized_results,
+            "vector_enhanced": result.get("vector_enhanced", False),
+            "suggestions_used": result.get("suggestions_used", [])
         }, ensure_ascii=False, indent=2)
     except (TypeError, ValueError) as e:
         # 如果仍然有序列化问题，使用更安全的格式化方法
@@ -121,7 +208,9 @@ async def database_query_tool(question: str) -> Dict[str, Any]:
     return {
         "content": formatted_content,
         "sql_query": result.get("sql_query"),
-        "results": serialized_results
+        "results": serialized_results,
+        "vector_enhanced": result.get("vector_enhanced", False),
+        "suggestions_used": result.get("suggestions_used", [])
     }
 
 class KangniReActAgent:
@@ -207,6 +296,7 @@ class KangniReActAgent:
 
 1. rag_search_tool: 用于搜索文档和知识库，适合回答概念、原因、方法等问题
 2. database_query_tool: 用于查询数据库，适合回答统计、数据分析等问题
+   - 特别注意：当用户提到"订单"但没有指定具体类型时，系统会默认查询 kn_quality_trace_prod_order（生产订单表）
 
 当前问题意图分类为: {intent}
 分类原因: {state.get('reasoning', '')}

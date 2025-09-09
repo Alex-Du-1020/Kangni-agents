@@ -25,6 +25,7 @@ dependencies = [
     "alembic>=1.13.0",
     "psycopg2-binary>=2.9.0",
     "mcp>=1.13.1",
+    "numpy>=1.24.0",
 ]
 
 [tool.hatch.build.targets.wheel]

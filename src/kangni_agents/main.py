@@ -12,6 +12,7 @@ from fastapi.staticfiles import StaticFiles
 from .config import settings
 from .api.routes import router
 from .api.history_routes import router as history_router
+from .api.embedding_routes import router as embedding_router
 
 # Import required services
 from .services.rag_service import rag_service
@@ -146,6 +147,7 @@ def create_app() -> FastAPI:
     # 注册路由
     app.include_router(router)
     app.include_router(history_router)
+    app.include_router(embedding_router)
     
     @app.get("/")
     async def root():

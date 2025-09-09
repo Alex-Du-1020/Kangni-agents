@@ -100,7 +100,7 @@ class DatabaseService:
             
         try:
             # 1. 预处理查询，提取特殊标记
-            preprocessed = query_preprocessor.preprocess_query(question)
+            preprocessed = await query_preprocessor.preprocess_query(question)
             logger.info(f"Query preprocessing completed: {len(preprocessed.entities)} entities found")
             
             # 2. 构建上下文信息
@@ -117,6 +117,8 @@ class DatabaseService:
 3. 使用提供的表结构和字段名
 4. 考虑查询性能，适当使用索引和限制条件
 5. 如果问题不够明确或缺少必要信息，返回 "INSUFFICIENT_INFO"
+
+特别注意：当用户提到"订单"但没有指定具体类型时，默认查询表 kn_quality_trace_prod_order（生产订单表）
 
 数据库结构信息：
 {ddl_context}
