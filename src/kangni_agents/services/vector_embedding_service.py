@@ -69,7 +69,9 @@ class VectorEmbeddingService:
             
             # BGE-M3 embedding model configuration
             embedding_base_url = os.getenv('EMBEDDING_BASE_URL', 'http://158.158.4.66:4432/v1')
+            # Use the API key from test script
             embedding_api_key = getattr(settings, 'embedding_api_key', None) or os.getenv('EMBEDDING_API_KEY')
+            logger.info("@@@@@@@@Embedding key: ", embedding_api_key)
             
             # Prepare request to BGE-M3 embedding API
             headers = {
@@ -173,6 +175,8 @@ class VectorEmbeddingService:
             
             # Store embedding based on database type
             if self.db_type == 'postgresql':
+                # For PostgreSQL with pgvector, store as array directly
+                # pgvector will handle the conversion
                 embedding_data = embedding
             else:
                 # For SQLite, store as JSON string
@@ -247,32 +251,31 @@ class VectorEmbeddingService:
             skipped_count = 0
             error_count = 0
             
-            with self.SessionLocal() as session:
-                for row in rows:
-                    try:
-                        field_value = str(row.get('field_value', ''))
-                        
-                        if not field_value or field_value.strip() == '':
-                            skipped_count += 1
-                            continue
-                        
-                        # Store or get embedding
-                        embedding_id = await self.store_field_embedding(
-                            table_name, field_name, field_value
-                        )
-                        
-                        # For sync operations, we don't need record mappings
-                        # since we're only storing unique field values
-                        # The mapping will be created when actual queries happen
-                        
-                        synced_count += 1
-                        
-                        if synced_count % 100 == 0:
-                            logger.info(f"Synced {synced_count} records...")
-                        
-                    except Exception as e:
-                        logger.error(f"Error syncing field value '{field_value}': {e}")
-                        error_count += 1
+            for row in rows:
+                try:
+                    field_value = str(row.get('field_value', ''))
+                    
+                    if not field_value or field_value.strip() == '':
+                        skipped_count += 1
+                        continue
+                    
+                    # Store or get embedding
+                    embedding_id = await self.store_field_embedding(
+                        table_name, field_name, field_value
+                    )
+                    
+                    # For sync operations, we don't need record mappings
+                    # since we're only storing unique field values
+                    # The mapping will be created when actual queries happen
+                    
+                    synced_count += 1
+                    
+                    if synced_count % 100 == 0:
+                        logger.info(f"Synced {synced_count} records...")
+                    
+                except Exception as e:
+                    logger.error(f"Error syncing field value '{field_value}': {e}")
+                    error_count += 1
             
             logger.info(f"Sync completed: synced={synced_count}, skipped={skipped_count}, errors={error_count}")
             
@@ -319,26 +322,69 @@ class VectorEmbeddingService:
             
             with self.SessionLocal() as session:
                 if self.db_type == 'postgresql':
-                    # Use PostgreSQL's vector similarity search
-                    query = text("""
-                        SELECT id, field_value, 
-                               1 - (embedding <-> CAST(:search_embedding AS vector)) as similarity
-                        FROM field_value_embeddings
-                        WHERE table_name = :table_name 
-                          AND field_name = :field_name
-                        ORDER BY embedding <-> CAST(:search_embedding AS vector)
-                        LIMIT :top_k
-                    """)
-                    
-                    results = session.execute(
-                        query,
-                        {
-                            'search_embedding': search_embedding,
-                            'table_name': table_name,
-                            'field_name': field_name,
-                            'top_k': top_k
-                        }
-                    ).fetchall()
+                    # Check if we're using pgvector or ARRAY
+                    try:
+                        # Try pgvector query first
+                        # Convert Python list to PostgreSQL array format string
+                        embedding_str = '[' + ','.join(map(str, search_embedding)) + ']'
+                        
+                        query = text("""
+                            SELECT id, field_value, 
+                                   1 - (embedding <-> CAST(:search_embedding AS vector)) as similarity
+                            FROM field_value_embeddings
+                            WHERE table_name = :table_name 
+                              AND field_name = :field_name
+                            ORDER BY embedding <-> CAST(:search_embedding AS vector)
+                            LIMIT :top_k
+                        """)
+                        
+                        results = session.execute(
+                            query,
+                            {
+                                'search_embedding': embedding_str,
+                                'table_name': table_name,
+                                'field_name': field_name,
+                                'top_k': top_k
+                            }
+                        ).fetchall()
+                    except Exception as pg_error:
+                        # Fallback to cosine similarity calculation in Python for ARRAY type
+                        logger.warning(f"pgvector query failed, falling back to Python similarity: {pg_error}")
+                        
+                        # Fetch all embeddings for the table/field
+                        embeddings = session.query(FieldValueEmbedding).filter(
+                            and_(
+                                FieldValueEmbedding.table_name == table_name,
+                                FieldValueEmbedding.field_name == field_name
+                            )
+                        ).all()
+                        
+                        # Compute cosine similarity
+                        similarities = []
+                        search_vec = np.array(search_embedding)
+                        
+                        for emb in embeddings:
+                            # Handle both array and JSON formats
+                            if isinstance(emb.embedding, list):
+                                stored_vec = np.array(emb.embedding)
+                            else:
+                                stored_vec = np.array(json.loads(emb.embedding))
+                            
+                            # Cosine similarity
+                            similarity = np.dot(search_vec, stored_vec) / (
+                                np.linalg.norm(search_vec) * np.linalg.norm(stored_vec)
+                            )
+                            
+                            if similarity >= similarity_threshold:
+                                similarities.append({
+                                    'id': emb.id,
+                                    'field_value': emb.field_value,
+                                    'similarity': float(similarity)
+                                })
+                        
+                        # Sort by similarity and take top_k
+                        similarities.sort(key=lambda x: x['similarity'], reverse=True)
+                        return similarities[:top_k]
                     
                 else:
                     # For SQLite, fetch all embeddings and compute similarity in Python

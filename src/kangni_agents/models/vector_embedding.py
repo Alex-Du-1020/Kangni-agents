@@ -13,8 +13,15 @@ Base = declarative_base()
 db_type = os.getenv('DB_TYPE', 'sqlite').lower()
 
 if db_type == 'postgresql':
-    from sqlalchemy.dialects.postgresql import ARRAY
-    EmbeddingColumn = ARRAY(Float)
+    try:
+        # Try to use pgvector if available
+        from pgvector.sqlalchemy import Vector
+        # BGE-M3 typically generates 1024-dimensional embeddings
+        EmbeddingColumn = Vector(1024)
+    except ImportError:
+        # Fallback to ARRAY if pgvector is not installed
+        from sqlalchemy.dialects.postgresql import ARRAY
+        EmbeddingColumn = ARRAY(Float)
 else:
     # For SQLite, use Text to store JSON
     EmbeddingColumn = Text

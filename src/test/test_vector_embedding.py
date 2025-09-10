@@ -31,7 +31,7 @@ class TestVectorEmbedding:
             embedding = await self.vector_service.generate_embedding(text)
             
             assert isinstance(embedding, list), "Embedding should be a list"
-            assert len(embedding) == 768, f"Embedding dimension should be 768, got {len(embedding)}"
+            assert len(embedding) == 1024, f"Embedding dimension should be 1024, got {len(embedding)}"
             assert all(isinstance(x, float) for x in embedding), "All embedding values should be float"
             
             print(f"✓ Generated embedding for '{text}'")
@@ -279,7 +279,7 @@ class TestVectorEmbedding:
 async def main():
     """Main test runner"""
     # Set environment for testing
-    os.environ['DB_TYPE'] = 'sqlite'
+    os.environ['DB_TYPE'] = 'postgresql'
     
     tester = TestVectorEmbedding()
     success = await tester.run_all_tests()

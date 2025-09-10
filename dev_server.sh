@@ -5,7 +5,7 @@ source .venv/bin/activate
 
 # Set development environment
 export ENVIRONMENT=development
-export LOG_LEVEL=INFO
+export LOG_LEVEL=DEBUG
 
 # Check if .env file exists and load it
 if [ -f .env ]; then
