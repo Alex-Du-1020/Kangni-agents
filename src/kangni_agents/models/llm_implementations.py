@@ -496,13 +496,14 @@ class CentralizedLLMService:
                 
             elif provider == "openai":
                 api_key = settings.openai_api_key
+                model = settings.openai_model
                 if not api_key:
                     logger.warning("OpenAI API key not available")
                     return
                     
                 config = LLMProviderConfig.OPENAI_CONFIG
                 llm_config = OpenAIConfig(
-                    model_name=config["model_name"],
+                    model_name=model or config["model_name"],
                     api_key=api_key,
                     base_url=config["base_url"],
                     temperature=config["temperature"],

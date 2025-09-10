@@ -27,6 +27,7 @@ class LLMConfig(BaseModel):
 class OpenAIConfig(LLMConfig):
     """OpenAI配置"""
     provider: LLMProvider = LLMProvider.OPENAI
+    base_url: str = "https://api.chatanywhere.tech/v1"
     model_name: str = "gpt-4.1-ca"
     organization: Optional[str] = None
 
@@ -92,11 +93,3 @@ class BaseLLMProvider(ABC):
             "temperature": self.config.temperature,
             "max_tokens": self.config.max_tokens
         }
-
-# 配置类映射
-CONFIG_MAPPING = {
-    LLMProvider.OPENAI: OpenAIConfig,
-    LLMProvider.DEEPSEEK: DeepSeekConfig,
-    LLMProvider.ALIBABA: AlibabaConfig,
-    LLMProvider.OLLAMA: OllamaConfig,
-}

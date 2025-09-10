@@ -203,7 +203,7 @@ python src/test/test_comprehensive.py
 ./prod_server.sh
 
 # 检查健康状态
-curl http://localhost:8000/health
+curl http://localhost:8000/qomo/v1/health
 ```
 
 ### 关键配置

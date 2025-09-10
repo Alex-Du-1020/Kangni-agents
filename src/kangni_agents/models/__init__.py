@@ -56,7 +56,6 @@ from .llm_providers import (
     OpenAIConfig, DeepSeekConfig, AlibabaConfig,
     BaseLLMProvider
 )
-from .llm_manager import LLMManager, LLMFactory, create_simple_manager, create_multi_provider_manager
 
 __all__ = [
     # 原有模型
@@ -66,6 +65,5 @@ __all__ = [
     # LLM相关模型
     "LLMProvider", "LLMConfig", "LLMMessage", "LLMResponse",
     "OpenAIConfig", "DeepSeekConfig", "AlibabaConfig",
-    "BaseLLMProvider", "LLMManager", "LLMFactory", 
-    "create_simple_manager", "create_multi_provider_manager"
+    "BaseLLMProvider"
 ]

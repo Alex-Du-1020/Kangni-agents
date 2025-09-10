@@ -111,8 +111,8 @@ class HistoryEndpointTests:
             return False
     
     async def test_get_user_history(self):
-        """Test GET /api/v1/history/user/{email}"""
-        print("\n1️⃣ Testing GET /api/v1/history/user/{email}...")
+        """Test GET /qomo/v1/history/user/{email}"""
+        print("\n1️⃣ Testing GET /qomo/v1/history/user/{email}...")
         
         try:
             from kangni_agents.services.history_service import history_service
@@ -146,8 +146,8 @@ class HistoryEndpointTests:
             return False
     
     async def test_get_session_history(self):
-        """Test GET /api/v1/history/session/{session_id}"""
-        print("\n2️⃣ Testing GET /api/v1/history/session/{session_id}...")
+        """Test GET /qomo/v1/history/session/{session_id}"""
+        print("\n2️⃣ Testing GET /qomo/v1/history/session/{session_id}...")
         
         try:
             from kangni_agents.services.history_service import history_service
@@ -172,8 +172,8 @@ class HistoryEndpointTests:
             return False
     
     async def test_search_history(self):
-        """Test GET /api/v1/history/search"""
-        print("\n3️⃣ Testing GET /api/v1/history/search...")
+        """Test GET /qomo/v1/history/search"""
+        print("\n3️⃣ Testing GET /qomo/v1/history/search...")
         
         try:
             from kangni_agents.services.history_service import history_service
@@ -195,8 +195,8 @@ class HistoryEndpointTests:
             return False
     
     async def test_recent_queries(self):
-        """Test GET /api/v1/history/recent"""
-        print("\n4️⃣ Testing GET /api/v1/history/recent...")
+        """Test GET /qomo/v1/history/recent"""
+        print("\n4️⃣ Testing GET /qomo/v1/history/recent...")
         
         try:
             from kangni_agents.services.history_service import history_service
@@ -216,8 +216,8 @@ class HistoryEndpointTests:
             return False
     
     async def test_add_feedback(self):
-        """Test POST /api/v1/history/feedback"""
-        print("\n5️⃣ Testing POST /api/v1/history/feedback...")
+        """Test POST /qomo/v1/history/feedback"""
+        print("\n5️⃣ Testing POST /qomo/v1/history/feedback...")
         
         if not self.test_query_id:
             print("⚠️ No query ID available for feedback test")
@@ -253,8 +253,8 @@ class HistoryEndpointTests:
             return False
     
     async def test_add_comment(self):
-        """Test POST /api/v1/history/comment"""
-        print("\n6️⃣ Testing POST /api/v1/history/comment...")
+        """Test POST /qomo/v1/history/comment"""
+        print("\n6️⃣ Testing POST /qomo/v1/history/comment...")
         
         if not self.test_query_id:
             print("⚠️ No query ID available for comment test")
@@ -280,8 +280,8 @@ class HistoryEndpointTests:
             return False
     
     async def test_get_comments(self):
-        """Test GET /api/v1/history/comments/{query_id}"""
-        print("\n7️⃣ Testing GET /api/v1/history/comments/{query_id}...")
+        """Test GET /qomo/v1/history/comments/{query_id}"""
+        print("\n7️⃣ Testing GET /qomo/v1/history/comments/{query_id}...")
         
         if not self.test_query_id:
             print("⚠️ No query ID available for get comments test")
@@ -328,8 +328,8 @@ class HistoryEndpointTests:
             return False
     
     async def test_feedback_stats(self):
-        """Test GET /api/v1/history/feedback/stats/{query_id}"""
-        print("\n8️⃣ Testing GET /api/v1/history/feedback/stats/{query_id}...")
+        """Test GET /qomo/v1/history/feedback/stats/{query_id}"""
+        print("\n8️⃣ Testing GET /qomo/v1/history/feedback/stats/{query_id}...")
         
         if not self.test_query_id:
             print("⚠️ No query ID available for stats test")
@@ -361,7 +361,7 @@ class HistoryEndpointTests:
             
             async with httpx.AsyncClient() as client:
                 # Test health endpoint
-                response = await client.get(f"{BASE_URL}/health", timeout=5.0)
+                response = await client.get(f"{BASE_URL}/qomo/v1/health", timeout=5.0)
                 if response.status_code != 200:
                     print("⚠️ Server not healthy or not running")
                     return False
@@ -370,7 +370,7 @@ class HistoryEndpointTests:
                 
                 # Test user history endpoint
                 response = await client.get(
-                    f"{BASE_URL}/api/v1/history/user/{TEST_EMAIL}",
+                    f"{BASE_URL}/qomo/v1/history/user/{TEST_EMAIL}",
                     params={"limit": 10, "offset": 0},
                     timeout=10.0
                 )
@@ -383,7 +383,7 @@ class HistoryEndpointTests:
                 
                 # Test session history endpoint
                 response = await client.get(
-                    f"{BASE_URL}/api/v1/history/session/{TEST_SESSION}",
+                    f"{BASE_URL}/qomo/v1/history/session/{TEST_SESSION}",
                     params={"limit": 10},
                     timeout=10.0
                 )
@@ -397,7 +397,7 @@ class HistoryEndpointTests:
                 # Test comments endpoint if we have a query ID
                 if self.test_query_id:
                     response = await client.get(
-                        f"{BASE_URL}/api/v1/history/comments/{self.test_query_id}",
+                        f"{BASE_URL}/qomo/v1/history/comments/{self.test_query_id}",
                         timeout=10.0
                     )
                     

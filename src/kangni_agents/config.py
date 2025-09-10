@@ -29,6 +29,7 @@ class Settings(BaseSettings):
     # LLM设置 - 简化的配置
     llm_provider: str = Field(default="deepseek", alias="LLM_PROVIDER")  # 可选: "deepseek", "openai", "alibaba", "ollama"
     openai_api_key: Optional[str] = Field(default=None, alias="OPENAI_API_KEY")
+    openai_model: Optional[str] = Field(default=None, alias="OPENAI_MODEL")
     deepseek_api_key: Optional[str] = Field(default=None, alias="DEEPSEEK_API_KEY")
     alibaba_api_key: Optional[str] = Field(default=None, alias="ALIBABA_API_KEY")
     embedding_api_key: Optional[str] = Field(default=None, alias="EMBEDDING_API_KEY")

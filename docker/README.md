@@ -54,13 +54,13 @@ docker-compose -f docker-compose.dev.yml logs -f kangni-agents
 ### 生产环境
 - **应用服务**: http://localhost:8000
 - **API 文档**: http://localhost:8000/docs
-- **健康检查**: http://localhost:8000/api/v1/health
+- **健康检查**: http://localhost:8000/qomo/v1/health
 - **PostgreSQL**: localhost:5432
 
 ### 开发环境
 - **应用服务**: http://localhost:8001
 - **API 文档**: http://localhost:8001/docs
-- **健康检查**: http://localhost:8001/api/v1/health
+- **健康检查**: http://localhost:8001/qomo/v1/health
 - **PostgreSQL**: localhost:5433
 
 ## 数据库管理
@@ -175,7 +175,7 @@ docker exec -it kangni-agents bash
 docker-compose ps
 
 # 手动健康检查
-curl http://localhost:8000/api/v1/health
+curl http://localhost:8000/qomo/qomo/health
 ```
 
 ### 日志查看

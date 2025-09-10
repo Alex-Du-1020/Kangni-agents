@@ -145,7 +145,7 @@ mypy src/
 **Service Layer**
 - **RAG Service** (`services/rag_service.py`): Integrates with RAGFlow MCP server for document retrieval
 - **Database Service** (`services/database_service.py`): SQL generation and execution with query preprocessing
-- **LLM Service** (`services/llm_service.py`): Multi-provider LLM support (DeepSeek default, OpenAI, Alibaba)
+- **LLM Service** (`models/llm_implementations.py`): Multi-provider LLM support (DeepSeek default, OpenAI, Alibaba)
 - **History Service** (`services/history_service.py`): Tracks query history, user feedback, and comments
 
 **Intent Classification (`utils/intent_classifier.py`)**
@@ -179,13 +179,13 @@ The system supports multiple LLM providers through a flexible architecture:
 - `UserComment`: Stores user comments on queries
 
 **History API Endpoints**
-- `GET /api/v1/history/user/{email}` - Get user's query history
-- `GET /api/v1/history/session/{session_id}` - Get session history
-- `GET /api/v1/history/search` - Search history by keyword
-- `GET /api/v1/history/recent` - Get recent queries
-- `POST /api/v1/history/feedback` - Add like/dislike
-- `POST /api/v1/history/comment` - Add comment
-- `GET /api/v1/history/feedback/stats/{query_id}` - Get feedback statistics
+- `GET /qomo/v1/history/user/{email}` - Get user's query history
+- `GET /qomo/v1/history/session/{session_id}` - Get session history
+- `GET /qomo/v1/history/search` - Search history by keyword
+- `GET /qomo/v1/history/recent` - Get recent queries
+- `POST /qomo/v1/history/feedback` - Add like/dislike
+- `POST /qomo/v1/history/comment` - Add comment
+- `GET /qomo/v1/history/feedback/stats/{query_id}` - Get feedback statistics
 
 ### Environment Configuration
 
@@ -200,19 +200,19 @@ Required `.env` file variables:
 ### API Endpoints
 
 **Core Endpoints**
-- `POST /api/v1/query` - Main query endpoint (requires user_email)
-- `GET /health` - Health check
+- `POST /qomo/v1/query` - Main query endpoint (requires user_email)
+- `GET /qomo/v1/health` - Health check
 - `GET /docs` - Swagger UI documentation
-- `GET /api/v1/config` - Configuration info
+- `GET /qomo/v1/config` - Configuration info
 
 **History Endpoints**
-- `GET /api/v1/history/user/{email}` - User query history
-- `GET /api/v1/history/session/{session_id}` - Session history
-- `GET /api/v1/history/search` - Search history
-- `GET /api/v1/history/recent` - Recent queries
-- `POST /api/v1/history/feedback` - Add feedback
-- `POST /api/v1/history/comment` - Add comment
-- `GET /api/v1/history/feedback/stats/{query_id}` - Feedback stats
+- `GET /qomo/v1/history/user/{email}` - User query history
+- `GET /qomo/v1/history/session/{session_id}` - Session history
+- `GET /qomo/v1/history/search` - Search history
+- `GET /qomo/v1/history/recent` - Recent queries
+- `POST /qomo/v1/history/feedback` - Add feedback
+- `POST /qomo/v1/history/comment` - Add comment
+- `GET /qomo/v1/history/feedback/stats/{query_id}` - Feedback stats
 
 ## Important Notes
 

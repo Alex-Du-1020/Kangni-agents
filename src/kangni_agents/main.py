@@ -33,48 +33,45 @@ async def check_service_availability():
     """检查所有必需服务的可用性"""
     logger.info("Checking service availability...")
     
+    service_status = {}
+    
     # 检查RAG服务
     try:
         from .services.rag_service import rag_service
-        logger.info("RAG service imported successfully")
-        
-        # 测试RAG服务连接
-        if not await rag_service.check_availability():
-            raise RuntimeError("RAG service connection test failed")
-        logger.info("RAG service connection test successful")
-        
-    except ImportError as e:
-        logger.error(f"Failed to import RAG service: {e}")
-        raise RuntimeError(f"RAG service unavailable: {e}")
+        if await rag_service.check_availability():
+            service_status["rag"] = "available"
+            logger.info("RAG service available")
+        else:
+            service_status["rag"] = "unavailable"
+            logger.error("RAG service unavailable")
+    except Exception as e:
+        service_status["rag"] = f"error: {e}"
+        logger.error(f"RAG service error: {e}")
     
     # 检查数据库服务
     try:
         from .services.database_service import db_service
-        logger.info("Database service imported successfully")
-        
-        # 测试数据库连接
-        try:
-            await db_service.get_table_schema()
-            logger.info("Database connection test successful")
-        except Exception as e:
-            logger.error(f"Database connection test failed: {e}")
-            raise RuntimeError(f"Database service unavailable: {e}")
-            
-    except ImportError as e:
-        logger.error(f"Failed to import database service: {e}")
-        raise RuntimeError(f"Database service unavailable: {e}")
+        await db_service.get_table_schema()
+        service_status["database"] = "available"
+        logger.info("Database service available")
+    except Exception as e:
+        service_status["database"] = f"error: {e}"
+        logger.error(f"Database service error: {e}")
     
     # 检查LLM服务
     try:
         from .agents.react_agent import kangni_agent
-        if not kangni_agent.llm_available:
-            raise RuntimeError("LLM service not available")
-        logger.info("LLM service available")
-    except ImportError as e:
-        logger.error(f"Failed to import LLM service: {e}")
-        raise RuntimeError(f"LLM service unavailable: {e}")
+        if kangni_agent.llm_available:
+            service_status["llm"] = "available"
+            logger.info("LLM service available")
+        else:
+            service_status["llm"] = "unavailable"
+            logger.error("LLM service unavailable")
+    except Exception as e:
+        service_status["llm"] = f"error: {e}"
+        logger.error(f"LLM service error: {e}")
     
-    logger.info("All services are available")
+    return service_status
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -83,8 +80,14 @@ async def lifespan(app: FastAPI):
     
     # 启动时检查服务可用性
     try:
-        await check_service_availability()
-        logger.info("✅ All services are available, application starting successfully")
+        service_status = await check_service_availability()
+        unavailable_services = [name for name, status in service_status.items() if status != "available"]
+        
+        if unavailable_services:
+            logger.warning(f"❌ Some services are unavailable: {unavailable_services}")
+            # 可以选择是否在启动时失败，这里只是警告
+        else:
+            logger.info("✅ All services are available, application starting successfully")
     except Exception as e:
         logger.error(f"❌ Service availability check failed: {e}")
         raise RuntimeError(f"Application cannot start due to service unavailability: {e}")
@@ -156,22 +159,51 @@ def create_app() -> FastAPI:
             "version": "0.1.0",
             "docs": "/docs"
         }
+
+    @app.get("/qomo/v1/health")
+    async def health():
+        """健康检查"""
+        return {"status": "healthy", "service": "kangni-agents"}
     
-    @app.get("/health")
+    @app.get("/qomo/v1/healthCheck")
     async def health_check():
         """健康检查 - 验证所有服务是否可用"""
         try:
-            await check_service_availability()
-            return {
-                "status": "healthy",
-                "message": "All services are available",
-                "timestamp": asyncio.get_event_loop().time()
-            }
+            service_status = await check_service_availability()
+            unavailable_services = [name for name, status in service_status.items() if status != "available"]
+            
+            if unavailable_services:
+                return {
+                    "status": "degraded",
+                    "message": f"Some services are unavailable: {unavailable_services}",
+                    "services": service_status,
+                    "timestamp": asyncio.get_event_loop().time()
+                }
+            else:
+                return {
+                    "status": "healthy",
+                    "message": "All services are available",
+                    "services": service_status,
+                    "timestamp": asyncio.get_event_loop().time()
+                }
         except Exception as e:
             raise HTTPException(
                 status_code=503,
-                detail=f"Service unavailable: {str(e)}"
+                detail=f"Service check failed: {str(e)}"
             )
+
+    @router.get("/qomo/v1/config")
+    async def get_config():
+        """获取配置信息（用于调试）"""
+        return {
+            "ragflow_server": settings.ragflow_mcp_server_url,
+            "default_dataset": settings.ragflow_default_dataset_id,
+            "db_datasets": {
+                "ddl": settings.db_ddl_dataset_id,
+                "query_sql": settings.db_query_sql_dataset_id,
+                "description": settings.db_description_dataset_id
+            }
+        }
 
     return app
 
