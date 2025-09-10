@@ -54,8 +54,8 @@ docker-compose -f docker-compose.dev.yml up -d
 
 1. **配置环境变量**
    - 在 GitLab 项目设置中添加：
-     - `ALIBABA_ACCESS_KEY_ID`: `LTAI5tRfYCXUtbtk2B8FAkCX`
-     - `ALIBABA_ACCESS_KEY_SECRET`: `DZ51dA7wcDJ7cPTXA6y2mGlE7c5NX7`
+     - `ALIBABA_ACCESS_KEY_ID`: `{$ACCESS_ID}`
+     - `ALIBABA_ACCESS_KEY_SECRET`: `{$ACCESS_SECRET}`
 
 2. **触发部署**
    - 向 `main` 分支推送代码
