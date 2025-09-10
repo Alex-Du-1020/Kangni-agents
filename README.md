@@ -51,7 +51,7 @@ python src/test/test_comprehensive.py
 
 - **服务器**: http://localhost:8000
 - **API 文档**: http://localhost:8000/docs
-- **健康检查**: http://localhost:8000/health
+- **健康检查**: http://localhost:8000/qomo/v1/health
 
 ## Docker 使用
 
@@ -67,9 +67,9 @@ docker run -p 8000:8000 kangni-agents
 
 ## API 接口
 
-- `POST /api/v1/query` - 提交问题进行处理
-- `GET /api/v1/health` - 健康检查
-- `GET /api/v1/config` - 配置信息
+- `POST /qomo/v1/query` - 提交问题进行处理
+- `GET /qomo/v1/health` - 健康检查
+- `GET /qomo/v1/config` - 配置信息
 - `GET /docs` - 交互式 API 文档
 
 ## 环境变量
@@ -138,7 +138,7 @@ src/kangni_agents/
 **注意：user_email 现在是所有查询的必需参数，用于启用历史跟踪和反馈功能**
 
 ```bash
-curl -X POST "http://localhost:8000/api/v1/query" \
+curl -X POST "http://localhost:8000/qomo/v1/query" \
      -H "Content-Type: application/json" \
      -d '{
        "question": "用户总数有多少？",
@@ -151,7 +151,7 @@ curl -X POST "http://localhost:8000/api/v1/query" \
 ### 健康检查
 
 ```bash
-curl "http://localhost:8000/api/v1/health"
+curl "http://localhost:8000/qomo/v1/health"
 ```
 
 ## 功能特性

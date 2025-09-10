@@ -34,7 +34,7 @@ The history functionality allows the system to:
 
 ## API Endpoints
 
-### History Endpoints (`/api/v1/history`)
+### History Endpoints (`/qomo/v1/history`)
 
 - `GET /user/{user_email}` - Get query history for a user
 - `GET /session/{session_id}` - Get query history for a session
@@ -46,7 +46,7 @@ The history functionality allows the system to:
 
 ### Query Endpoint Enhancement
 
-The main `/api/v1/query` endpoint now automatically:
+The main `/qomo/v1/query` endpoint now automatically:
 - Saves successful queries with answers
 - Records failed queries with error messages
 - Tracks processing time
@@ -127,10 +127,10 @@ results = await history_service.search_history(
 
 ```bash
 # Get user history
-curl "http://localhost:8000/api/v1/history/user/test@example.com"
+curl "http://localhost:8000/qomo/v1/history/user/test@example.com"
 
 # Add feedback
-curl -X POST "http://localhost:8000/api/v1/history/feedback" \
+curl -X POST "http://localhost:8000/qomo/v1/history/feedback" \
   -H "Content-Type: application/json" \
   -d '{
     "query_id": 1,
@@ -139,10 +139,10 @@ curl -X POST "http://localhost:8000/api/v1/history/feedback" \
   }'
 
 # Search history
-curl "http://localhost:8000/api/v1/history/search?q=users&user_email=test@example.com"
+curl "http://localhost:8000/qomo/v1/history/search?q=users&user_email=test@example.com"
 
 # Get recent queries
-curl "http://localhost:8000/api/v1/history/recent?hours=24"
+curl "http://localhost:8000/qomo/v1/history/recent?hours=24"
 ```
 
 ## Testing

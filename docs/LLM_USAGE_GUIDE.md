@@ -50,25 +50,30 @@ OLLAMA_BASE_URL=http://localhost:11434
 ### 2. 基本使用
 
 ```python
-from src.kangni_agents.services.llm_service import llm_service
+from src.kangni_agents.models.llm_implementations import llm_service
 
 # 简单聊天
-answer = await llm_service.simple_chat("你好，请介绍一下自己")
+answer = await llm_service.chat_with_system_prompt(
+    system_prompt="你是一个有用的AI助手",
+    human_prompt="你好，请介绍一下自己"
+)
 print(answer)
 
 # 带系统提示的聊天
-answer = await llm_service.simple_chat(
-    question="解释什么是机器学习",
-    system_prompt="你是一个专业的AI技术专家"
+answer = await llm_service.chat_with_system_prompt(
+    system_prompt="你是一个专业的AI技术专家",
+    human_prompt="解释什么是机器学习"
 )
 print(answer)
 
 # 多轮对话
-response = await llm_service.chat([
-    "你好",
-    "你好！有什么可以帮助您的吗？",
-    "请解释一下人工智能"
-])
+from src.kangni_agents.models.llm_providers import LLMMessage
+messages = [
+    LLMMessage(role="user", content="你好"),
+    LLMMessage(role="assistant", content="你好！有什么可以帮助您的吗？"),
+    LLMMessage(role="user", content="请解释一下人工智能")
+]
+response = await llm_service.chat(messages)
 print(response.content)
 ```
 
@@ -76,36 +81,26 @@ print(response.content)
 
 ```python
 from src.kangni_agents.models import (
-    LLMManager, create_multi_provider_manager, 
     LLMProvider, LLMMessage, OpenAIConfig
 )
 
-# 创建多提供商管理器
-configs = [
-    {
-        "provider": LLMProvider.OPENAI,
-        "model_name": "gpt-4",
-        "api_key": "your_openai_key",
-        "temperature": 0.3
-    }
-]
-
-manager = create_multi_provider_manager(configs)
+# 使用现有的集中式LLM服务
+from src.kangni_agents.models.llm_implementations import llm_service
 
 # 检查服务状态
-health = await manager.health_check()
-print("服务状态:", health)
+provider_info = llm_service.get_provider_info()
+print("服务状态:", provider_info)
 
 # 发送请求（自动故障转移）
 messages = [
     LLMMessage(role="user", content="你好")
 ]
-response = await manager.chat(messages)
+response = await llm_service.chat(messages)
 print(f"使用的提供商: {response.provider}")
 print(f"回答: {response.content}")
 
 # 流式输出
-stream = await manager.chat(messages, stream=True)
+stream = await llm_service.chat(messages, stream=True)
 async for chunk in stream:
     print(chunk, end="", flush=True)
 ```
@@ -115,7 +110,7 @@ async for chunk in stream:
 ### 健康检查接口
 
 ```bash
-GET /api/v1/llm/health
+GET /qomo/v1/llm/health
 ```
 
 返回：
@@ -134,7 +129,7 @@ GET /api/v1/llm/health
 ### 服务信息接口
 
 ```bash
-GET /api/v1/llm/info
+GET /qomo/v1/llm/info
 ```
 
 返回：
@@ -190,7 +185,7 @@ class NewProvider(BaseLLMProvider):
 
 ### 3. 注册提供商
 
-在 `LLMFactory.PROVIDER_IMPLEMENTATIONS` 中注册：
+在 `CentralizedLLMService` 中注册：
 
 ```python
 PROVIDER_IMPLEMENTATIONS = {
@@ -250,7 +245,10 @@ configs = [
 
 ```python
 try:
-    response = await llm_service.simple_chat("你好")
+    response = await llm_service.chat_with_system_prompt(
+        system_prompt="你是一个有用的AI助手",
+        human_prompt="你好"
+    )
     print(response)
 except Exception as e:
     logger.error(f"LLM请求失败: {e}")
@@ -267,8 +265,8 @@ except Exception as e:
 
 ```python
 # 检查服务健康状态
-health = await llm_service.health_check()
-if health["healthy_providers"] == 0:
+provider_info = llm_service.get_provider_info()
+if not provider_info['available']:
     # 发送告警
     pass
 
@@ -293,11 +291,8 @@ import logging
 logging.getLogger("src.kangni_agents.models").setLevel(logging.DEBUG)
 
 # 检查服务状态
-info = llm_service.get_service_info()
-print("服务信息:", info)
-
-health = await llm_service.health_check()
-print("健康状态:", health)
+provider_info = llm_service.get_provider_info()
+print("服务信息:", provider_info)
 ```
 
 ## 扩展开发

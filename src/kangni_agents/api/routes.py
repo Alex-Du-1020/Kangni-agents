@@ -6,14 +6,7 @@ import time
 
 from ..models import UserQuery, QueryResponse
 from ..services.history_service import history_service
-
-# Try to import the full react_agent, fallback to minimal version
-try:
-    from ..agents.react_agent import kangni_agent
-except ImportError as e:
-    import warnings
-    warnings.warn(f"Could not import full react_agent ({e}), using fallback version")
-    from ..agents.react_agent_fallback import kangni_agent
+from ..agents.react_agent import kangni_agent
 
 logger = logging.getLogger(__name__)
 
@@ -140,22 +133,3 @@ async def process_query(query: UserQuery):
         except Exception as history_error:
             logger.warning(f"Failed to save query history: {history_error}")
             # Don't fail the request if history saving fails
-
-@router.get("/health")
-async def health_check():
-    """健康检查"""
-    return {"status": "healthy", "service": "kangni-agents"}
-
-@router.get("/config")
-async def get_config():
-    """获取配置信息（用于调试）"""
-    from ..config import settings
-    return {
-        "ragflow_server": settings.ragflow_mcp_server_url,
-        "default_dataset": settings.ragflow_default_dataset_id,
-        "db_datasets": {
-            "ddl": settings.db_ddl_dataset_id,
-            "query_sql": settings.db_query_sql_dataset_id,
-            "description": settings.db_description_dataset_id
-        }
-    }

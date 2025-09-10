@@ -79,8 +79,12 @@ async def run_single_test(question: str, keywords: List[str]) -> TestResult:
         logger.info(f"Testing: {question[:50]}...")
         start_time = time.time()
         
-        # Create query
-        query = UserQuery(question=question)
+        # Create query with required user_email and session_id
+        query = UserQuery(
+            question=question,
+            user_email="test@example.com",  # Add required user_email for testing
+            session_id="test-session-001"   # Add session_id for testing
+        )
         
         # Execute query
         response = await kangni_agent.query(

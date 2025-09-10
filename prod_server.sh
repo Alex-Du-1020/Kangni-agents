@@ -34,7 +34,7 @@ echo "Python version: $(python --version)"
 echo ""
 echo "Server will be available at: http://localhost:8000"
 echo "API documentation: http://localhost:8000/docs"
-echo "Health check: http://localhost:8000/api/v1/health"
+echo "Health check: http://localhost:8000/qomo/v1/health"
 echo ""
 
 # Run with uvicorn for production

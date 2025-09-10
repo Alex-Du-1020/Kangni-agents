@@ -180,7 +180,7 @@ async def test_api_endpoint():
             # Test with different day parameters
             for days in [1, 7]:
                 response = await client.get(
-                    f"http://localhost:8000/api/v1/history/admin/dislike-review",
+                    f"http://localhost:8000/qomo/v1/history/admin/dislike-review",
                     params={"days": days, "limit": 10},
                     timeout=10.0
                 )
@@ -227,7 +227,7 @@ async def main():
     print("  • Returns: Queries with dislikes, ordered by created time")
     print("  • feedback_stats: Array of dislike comments from users who gave dislike feedback")
     print("  • Only includes comments from users who disliked the query")
-    print("\nEndpoint: GET /api/v1/history/admin/dislike-review")
+    print("\nEndpoint: GET /qomo/v1/history/admin/dislike-review")
     print("Parameters: ?days=7&limit=100")
 
 
