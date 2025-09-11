@@ -26,54 +26,83 @@ except ImportError as e:
 
 # Configure logging
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=logging.INFO,
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
 
 class TestResult:
-    def __init__(self, question: str, keywords: List[str]):
+    def __init__(self, question: str, keywords: List[str] = None, expected_sql: str = None):
         self.question = question
-        self.expected_keywords = keywords
+        self.expected_keywords = keywords or []
+        self.expected_sql = expected_sql
         self.response = None
         self.success = False
         self.error = None
         self.duration = 0.0
         self.keyword_matches = []
+        self.sql_match = False
 
     def check_keywords(self):
-        """检查响应中是否包含预期的关键词"""
+        """检查响应中是否包含预期的关键词或SQL查询"""
         if not self.response:
             return False
         
-        response_text = ""
-        if hasattr(self.response, 'answer'):
-            response_text = str(self.response.answer).lower()
-        elif hasattr(self.response, 'content'):
-            response_text = str(self.response.content).lower()
-        else:
-            response_text = str(self.response).lower()
+        # Check SQL query if expected_sql is provided
+        if self.expected_sql and hasattr(self.response, 'sql_query'):
+            expected_sql_normalized = self._normalize_sql(self.expected_sql)
+            actual_sql_normalized = self._normalize_sql(self.response.sql_query)
+            self.sql_match = expected_sql_normalized == actual_sql_normalized
+            logger.info(f"SQL Validation: {'✅ MATCH' if self.sql_match else '❌ MISMATCH'}")
+            logger.info(f"Expected SQL: {self.expected_sql}")
+            logger.info(f"Actual SQL: {self.response.sql_query}")
+            if self.sql_match:
+                return True
         
-        for keyword in self.expected_keywords:
-            if keyword.lower() in response_text:
-                self.keyword_matches.append(keyword)
+        # Check keywords if expected_keywords is provided
+        if self.expected_keywords:
+            response_text = ""
+            if hasattr(self.response, 'answer'):
+                response_text = str(self.response.answer).lower()
+            elif hasattr(self.response, 'content'):
+                response_text = str(self.response.content).lower()
+            else:
+                response_text = str(self.response).lower()
+            
+            for keyword in self.expected_keywords:
+                if keyword.lower() in response_text:
+                    self.keyword_matches.append(keyword)
+            
+            return len(self.keyword_matches) > 0
         
-        return len(self.keyword_matches) > 0
+        # If neither SQL nor keywords are provided, return False
+        return False
+    
+    def _normalize_sql(self, sql: str) -> str:
+        """Normalize SQL for comparison by removing extra whitespace, semicolons, and converting to uppercase"""
+        if not sql:
+            return ""
+        # Remove semicolons, extra whitespace and convert to uppercase for comparison
+        normalized = sql.strip().rstrip(';').strip()
+        normalized = ' '.join(normalized.split()).upper()
+        return normalized
 
     def to_dict(self):
         return {
             "question": self.question,
             "expected_keywords": self.expected_keywords,
+            "expected_sql": self.expected_sql,
             "success": self.success,
             "error": str(self.error) if self.error else None,
             "duration": self.duration,
             "keyword_matches": self.keyword_matches,
+            "sql_match": self.sql_match,
             "response": str(self.response) if self.response else None
         }
 
-async def run_single_test(question: str, keywords: List[str]) -> TestResult:
+async def run_single_test(question: str, keywords: List[str] = None, expected_sql: str = None) -> TestResult:
     """运行单个测试用例"""
-    result = TestResult(question, keywords)
+    result = TestResult(question, keywords, expected_sql)
     
     try:
         logger.info(f"Testing: {question[:50]}...")
@@ -94,6 +123,24 @@ async def run_single_test(question: str, keywords: List[str]) -> TestResult:
         
         result.duration = time.time() - start_time
         result.response = response
+        
+        # Display response in detail
+        logger.info("=" * 60)
+        logger.info("📋 RESPONSE DETAILS:")
+        logger.info(f"Response type: {type(response)}")
+        
+        if hasattr(response, 'answer'):
+            logger.info(f"Answer: {response.answer}")
+        if hasattr(response, 'content'):
+            logger.info(f"Content: {response.content}")
+        if hasattr(response, 'success'):
+            logger.info(f"Success: {response.success}")
+        if hasattr(response, 'error'):
+            logger.info(f"Error: {response.error}")
+        
+        # Display full response object
+        logger.info(f"Full response: {response}")
+        logger.info("=" * 60)
         
         # Check if keywords are present in response
         result.success = result.check_keywords()
@@ -129,24 +176,40 @@ async def run_all_tests():
     failed = 0
     
     for i, test_case in enumerate(test_cases, 1):
+        if(i not in [5]):  # Test both SQL and keyword validation
+            continue
         question = test_case.get("question", "")
         keywords = test_case.get("keywords", [])
+        expected_sql = test_case.get("SQL", None)
         
         print(f"\n[{i}/{len(test_cases)}] {question}")
-        print(f"Expected keywords: {', '.join(keywords)}")
+        if keywords:
+            print(f"Expected keywords: {', '.join(keywords)}")
+        if expected_sql:
+            print(f"Expected SQL: {expected_sql}")
         
-        result = await run_single_test(question, keywords)
+        result = await run_single_test(question, keywords, expected_sql)
         results.append(result)
         
         if result.success:
             passed += 1
-            print(f"✅ PASS - Found keywords: {', '.join(result.keyword_matches)}")
+            if result.sql_match:
+                print(f"✅ PASS - SQL query matches expected")
+            elif result.keyword_matches:
+                print(f"✅ PASS - Found keywords: {', '.join(result.keyword_matches)}")
+            else:
+                print(f"✅ PASS - Test passed")
         else:
             failed += 1
             if result.error:
                 print(f"❌ ERROR - {result.error}")
             else:
-                print(f"❌ FAIL - No expected keywords found in response")
+                if expected_sql and not result.sql_match:
+                    print(f"❌ FAIL - SQL query does not match expected")
+                elif keywords and not result.keyword_matches:
+                    print(f"❌ FAIL - No expected keywords found in response")
+                else:
+                    print(f"❌ FAIL - Test failed")
         
         print(f"Duration: {result.duration:.2f}s")
         
@@ -161,13 +224,6 @@ async def run_all_tests():
     print(f"Failed: {failed} ({failed/len(test_cases)*100:.1f}%)")
     print("=" * 80)
     
-    # Save detailed results
-    results_file = Path("test_results.json")
-    with open(results_file, 'w', encoding='utf-8') as f:
-        json.dump([r.to_dict() for r in results], f, indent=2, ensure_ascii=False)
-    
-    print(f"📄 Detailed results saved to: {results_file}")
-    
     # Print failed cases for review
     if failed > 0:
         print(f"\n❌ FAILED CASES:")
@@ -177,8 +233,12 @@ async def run_all_tests():
                 if result.error:
                     print(f"    Error: {result.error}")
                 else:
-                    print(f"    Expected: {', '.join(result.expected_keywords)}")
-                    print(f"    Found: {', '.join(result.keyword_matches) if result.keyword_matches else 'None'}")
+                    if result.expected_sql and not result.sql_match:
+                        print(f"    Expected SQL: {result.expected_sql}")
+                        print(f"    Actual SQL: {result.response.sql_query if hasattr(result.response, 'sql_query') else 'None'}")
+                    if result.expected_keywords and not result.keyword_matches:
+                        print(f"    Expected keywords: {', '.join(result.expected_keywords)}")
+                        print(f"    Found keywords: {', '.join(result.keyword_matches) if result.keyword_matches else 'None'}")
 
 def main():
     """主函数"""

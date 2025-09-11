@@ -3,7 +3,7 @@ from ..config import settings
 from ..models import RAGSearchResult
 from ..models.llm_implementations import llm_service
 from ..models.llm_providers import LLMMessage
-from ..utils.query_preprocessor import query_preprocessor, PreprocessedQuery
+from ..utils.query_preprocessor import query_preprocessor
 from .rag_service import rag_service
 import logging
 import json
@@ -115,7 +115,7 @@ class DatabaseService:
 1. 只返回SQL查询语句，不要添加额外的解释
 2. 确保SQL语法正确
 3. 使用提供的表结构和字段名
-4. 考虑查询性能，适当使用索引和限制条件
+4. 考虑查询性能，适当使用索引，限制条件，去重，分组等
 5. 如果问题不够明确或缺少必要信息，返回 "INSUFFICIENT_INFO"
 
 特别注意：当用户提到"订单"但没有指定具体类型时，默认查询表 kn_quality_trace_prod_order（生产订单表）

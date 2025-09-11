@@ -11,8 +11,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 
 from src.kangni_agents.services.database_service import db_service
-from src.kangni_agents.services.vector_embedding_service import VectorEmbeddingService
-from src.kangni_agents.services.llm_service import llm_service
+from src.kangni_agents.services.vector_embedding_service import vector_service
 from src.kangni_agents.agents.react_agent import kangni_agent
 
 import logging
@@ -26,8 +25,6 @@ async def test_vector_sync():
     print("="*50)
     
     try:
-        # Initialize vector service
-        vector_service = VectorEmbeddingService(db_service, llm_service)
         
         # Test syncing production orders with a small limit
         print("\nSyncing production order project names...")

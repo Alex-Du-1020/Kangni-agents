@@ -47,8 +47,6 @@ Thumbs.db
 .env.test
 .env.template
 
-<<<<<<< HEAD
 .serena/
-=======
-.serena/
->>>>>>> main
+
+.cursorrules

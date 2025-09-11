@@ -1,0 +1,12 @@
+# Vector Search Configuration
+# This file defines which database fields support vector similarity search
+# for handling inaccurate or fuzzy user inputs
+
+vector_search_fields:
+  # Production order table fields
+  - table: "kn_quality_trace_prod_order"
+    field: "projectname_s"
+    description: "项目名称"
+    keywords: ["项目", "工程", "project", "项目名"]
+    priority: 1
+    

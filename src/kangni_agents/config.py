@@ -34,6 +34,12 @@ class Settings(BaseSettings):
     alibaba_api_key: Optional[str] = Field(default=None, alias="ALIBABA_API_KEY")
     embedding_api_key: Optional[str] = Field(default=None, alias="EMBEDDING_API_KEY")
     
+    # Minimum similarity score to consider a match
+    similarity_threshold: Optional[float] = Field(default=0.3, alias="SIMILARITY_THRESHOLD")
+  
+    # Maximum number of suggestions per field
+    max_suggestions: Optional[int] = Field(default=3, alias="MAX_SUGGESTIONS")
+        
     # 日志设置
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
     environment: str = Field(default="production", alias="ENVIRONMENT")

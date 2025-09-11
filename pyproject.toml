@@ -27,6 +27,8 @@ dependencies = [
     "pgvector>=0.2.0",
     "mcp>=1.13.1",
     "numpy>=1.24.0",
+    "pyyaml>=6.0",
+    "sqlparse>=0.4.0",
 ]
 
 [tool.hatch.build.targets.wheel]

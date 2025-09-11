@@ -1,9 +1,12 @@
 [
     {
         "question": "#合肥S1号线项目乘客室门#这个项目一共有多少个去重后生产订单？",
-        "keywords": [
-            "845"
-        ]
+        "SQL": "SELECT COUNT(DISTINCT workorderno_s) FROM kn_quality_trace_prod_order WHERE projectname_s LIKE '%合肥S1号线项目乘客室门%';"
+        
+    },
+    {
+        "question": "合肥S1号线项目乘客室门这个项目一共有多少个去重后生产订单？",
+        "SQL": "SELECT COUNT(DISTINCT workorderno_s) FROM kn_quality_trace_prod_order WHERE projectname_s = '合肥S1号线项目乘客室门';"
     },
     {
         "question": "深圳14号线门扇外观问题团队中的质量工程师是谁？",
