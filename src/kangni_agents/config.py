@@ -32,7 +32,14 @@ class Settings(BaseSettings):
     openai_model: Optional[str] = Field(default=None, alias="OPENAI_MODEL")
     deepseek_api_key: Optional[str] = Field(default=None, alias="DEEPSEEK_API_KEY")
     alibaba_api_key: Optional[str] = Field(default=None, alias="ALIBABA_API_KEY")
+    embedding_api_key: Optional[str] = Field(default=None, alias="EMBEDDING_API_KEY")
     
+    # Minimum similarity score to consider a match
+    similarity_threshold: Optional[float] = Field(default=0.3, alias="SIMILARITY_THRESHOLD")
+  
+    # Maximum number of suggestions per field
+    max_suggestions: Optional[int] = Field(default=3, alias="MAX_SUGGESTIONS")
+        
     # 日志设置
     log_level: str = Field(default="INFO", alias="LOG_LEVEL")
     environment: str = Field(default="production", alias="ENVIRONMENT")
@@ -44,8 +51,6 @@ class Settings(BaseSettings):
     
     def get_log_level(self) -> str:
         """根据环境获取日志级别"""
-        if self.environment.lower() == "development" or self.environment.lower() == "dev":
-            return "DEBUG"
         return self.log_level.upper()
 
 settings = Settings()

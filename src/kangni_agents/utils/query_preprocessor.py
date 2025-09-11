@@ -27,11 +27,12 @@ class PreprocessedQuery:
     entities: List[ExtractedEntity]  # 提取的实体
     placeholders: Dict[str, str]  # 占位符映射
     sql_hints: Dict[str, str]  # SQL生成提示
+    vector_suggestions: Optional[List[str]] = None  # 向量搜索建议值
 
 class QueryPreprocessor:
     """查询预处理器"""
     
-    def __init__(self):
+    def __init__(self, vector_service=None):
         # 支持的标记模式
         self.patterns = {
             "hash_enclosed": r"#([^#]+)#",  # #内容# 形式
@@ -39,6 +40,9 @@ class QueryPreprocessor:
             "quote_enclosed": r'"([^"]+)"',  # "内容" 形式
             "parenthesis_enclosed": r"\(([^)]+)\)"  # (内容) 形式，但需要更谨慎处理
         }
+        
+        # 注入向量服务（如果可用）
+        self.vector_service = vector_service
         
         # 实体类型映射
         self.entity_type_mapping = {
@@ -363,7 +367,32 @@ class QueryPreprocessor:
             
         return hints
 
-    def preprocess_query(self, query: str) -> PreprocessedQuery:
+    async def get_vector_suggestions(self, query: str, table_name: str = "kn_quality_trace_prod_order", field_name: str = "projectname_s") -> List[str]:
+        """使用向量搜索获取相关字段值建议"""
+        if not self.vector_service:
+            return []
+        
+        try:
+            # 从查询中提取关键词
+            keywords = []
+            
+            # 检查是否有项目相关的关键词
+            if any(keyword in query for keyword in ["项目", "订单", "生产订单", "工单"]):
+                # 使用向量搜索获取相关的项目名称
+                suggestions = await self.vector_service.get_field_values_for_query(
+                    query_text=query,
+                    table_name=table_name,
+                    field_name=field_name
+                )
+                return suggestions
+            
+            return []
+            
+        except Exception as e:
+            logger.warning(f"Error getting vector suggestions: {e}")
+            return []
+
+    async def preprocess_query(self, query: str, use_vector_search: bool = False) -> PreprocessedQuery:
         """预处理查询"""
         logger.info(f"Preprocessing query: {query}")
         
@@ -379,12 +408,25 @@ class QueryPreprocessor:
         # 4. 生成SQL提示
         sql_hints = self.generate_sql_hints(query, entities, placeholders)
         
+        # 5. 如果启用，获取向量搜索建议
+        vector_suggestions = []
+        if use_vector_search:
+            vector_suggestions = await self.get_vector_suggestions(query)
+            if vector_suggestions:
+                logger.info(f"Got {len(vector_suggestions)} vector suggestions: {vector_suggestions}")
+                # 添加向量建议到SQL提示
+                sql_hints["vector_suggestions"] = (
+                    f"基于向量搜索，可能相关的项目名称有：{', '.join(vector_suggestions[:5])}\n"
+                    f"如果直接查询没有结果，可以尝试使用这些相关项目名称进行查询"
+                )
+        
         result = PreprocessedQuery(
             original_query=query,
             processed_query=processed_query,
             entities=entities,
             placeholders=placeholders,
-            sql_hints=sql_hints
+            sql_hints=sql_hints,
+            vector_suggestions=vector_suggestions
         )
         
         logger.info(f"Preprocessing completed. Found {len(entities)} entities")
@@ -429,6 +471,50 @@ class QueryPreprocessor:
                 enhanced_sections.append(hint_content)
         
         return "\n".join(enhanced_sections)
+
+    def preprocess_query_sync(self, query: str) -> PreprocessedQuery:
+        """同步版本的预处理查询（向后兼容）"""
+        import asyncio
+        
+        # 如果在事件循环中，创建新任务
+        try:
+            loop = asyncio.get_running_loop()
+            # 在事件循环中，返回不带向量搜索的基本预处理
+            return self._preprocess_query_basic(query)
+        except RuntimeError:
+            # 不在事件循环中，可以运行异步函数
+            return asyncio.run(self.preprocess_query(query, use_vector_search=False))
+    
+    def _preprocess_query_basic(self, query: str) -> PreprocessedQuery:
+        """基本预处理（不包含异步操作）"""
+        logger.info(f"Basic preprocessing query: {query}")
+        
+        # 1. 提取实体
+        entities = self.extract_entities(query)
+        
+        # 2. 创建占位符
+        placeholders = self.create_placeholders(entities)
+        
+        # 3. 替换为占位符
+        processed_query = self.replace_with_placeholders(query, entities)
+        
+        # 4. 生成SQL提示
+        sql_hints = self.generate_sql_hints(query, entities, placeholders)
+        
+        result = PreprocessedQuery(
+            original_query=query,
+            processed_query=processed_query,
+            entities=entities,
+            placeholders=placeholders,
+            sql_hints=sql_hints,
+            vector_suggestions=None
+        )
+        
+        logger.info(f"Basic preprocessing completed. Found {len(entities)} entities")
+        for entity in entities:
+            logger.info(f"Entity: {entity.raw_text} -> {entity.clean_text} ({entity.entity_type})")
+            
+        return result
 
 # 全局实例
 query_preprocessor = QueryPreprocessor()
