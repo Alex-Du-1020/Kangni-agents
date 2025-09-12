@@ -4,6 +4,7 @@ Comprehensive Vector Embedding Test Suite
 Combines basic embedding generation and advanced vector operations testing.
 """
 import asyncio
+import pytest
 import json
 import os
 import sys
@@ -26,10 +27,48 @@ else:
 from src.kangni_agents.services.vector_embedding_service import vector_service
 from src.kangni_agents.services.database_service import db_service
 from src.kangni_agents.utils.query_preprocessor import QueryPreprocessor
+from src.kangni_agents.models.history import QueryHistory, UserFeedback, UserComment, Memory
+from src.kangni_agents.models.database import get_db_config
 
 # Set up logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+async def clear_test_data(test_emails=None):
+    """Clear test data from the database for specific users
+    
+    Args:
+        test_emails: List of email addresses to clear data for. If None, clears all data.
+    """
+    if test_emails is None:
+        test_emails = ["test@example.com"]
+    
+    print(f"🧹 Clearing test data for emails: {test_emails}")
+    
+    try:
+        db_config = get_db_config()
+        with db_config.session_scope() as session:
+            
+            # 1. Clear memories for test users
+            session.query(Memory).filter(Memory.user_email.in_(test_emails)).delete()
+            
+            # 2. Clear comments for test users
+            session.query(UserComment).filter(UserComment.user_email.in_(test_emails)).delete()
+            
+            # 3. Clear feedback for test users
+            session.query(UserFeedback).filter(UserFeedback.user_email.in_(test_emails)).delete()
+            
+            # 4. Clear query history for test users
+            session.query(QueryHistory).filter(QueryHistory.user_email.in_(test_emails)).delete()
+            
+            session.commit()
+            print("✅ Test data cleared successfully")
+            
+    except Exception as e:
+        print(f"❌ Error clearing test data: {e}")
+        raise
+
 
 class ComprehensiveVectorEmbeddingTest:
     """Comprehensive test suite for vector embedding functionality"""
@@ -44,6 +83,8 @@ class ComprehensiveVectorEmbeddingTest:
         
         if not self.embedding_api_key:
             raise ValueError("EMBEDDING_API_KEY not found in environment variables")
+    
+    @pytest.mark.asyncio
     
     async def test_basic_embedding_generation(self):
         """Test basic embedding generation using BGE-M3 model"""
@@ -73,6 +114,8 @@ class ComprehensiveVectorEmbeddingTest:
             print(f"✗ Failed to generate embedding: {e}")
             self.test_results.append(("test_basic_embedding_generation", f"FAILED: {e}"))
             return False
+    
+    @pytest.mark.asyncio
     
     async def test_direct_api_embedding(self):
         """Test direct API call to BGE-M3 embedding service"""
@@ -123,6 +166,8 @@ class ComprehensiveVectorEmbeddingTest:
             self.test_results.append(("test_direct_api_embedding", f"FAILED: {e}"))
             return False
     
+    @pytest.mark.asyncio
+    
     async def test_store_field_embedding(self):
         """Test storing field embeddings"""
         print("\n=== Testing Store Field Embedding ===")
@@ -166,6 +211,8 @@ class ComprehensiveVectorEmbeddingTest:
                 print(f"✗ Failed to store embedding: {e}")
                 self.test_results.append(("test_store_field_embedding", f"FAILED: {e}"))
             return False
+    
+    @pytest.mark.asyncio
     
     async def test_search_similar_values(self):
         """Test vector similarity search"""
@@ -218,6 +265,8 @@ class ComprehensiveVectorEmbeddingTest:
                 self.test_results.append(("test_search_similar_values", f"FAILED: {e}"))
             return False
     
+    @pytest.mark.asyncio
+    
     async def test_sync_table_data(self):
         """Test syncing table data to embeddings"""
         print("\n=== Testing Sync Table Data ===")
@@ -247,6 +296,8 @@ class ComprehensiveVectorEmbeddingTest:
             print(f"✗ Failed to sync table data: {e}")
             self.test_results.append(("test_sync_table_data", f"FAILED: {e}"))
             return False
+    
+    @pytest.mark.asyncio
     
     async def test_query_preprocessor_with_vector(self):
         """Test query preprocessor with vector search"""
@@ -279,6 +330,8 @@ class ComprehensiveVectorEmbeddingTest:
             print(f"✗ Failed query preprocessing: {e}")
             self.test_results.append(("test_query_preprocessor_with_vector", f"FAILED: {e}"))
             return False
+    
+    @pytest.mark.asyncio
     
     async def test_api_endpoints(self):
         """Test API endpoints for vector embedding"""
@@ -340,6 +393,8 @@ class ComprehensiveVectorEmbeddingTest:
             self.test_results.append(("test_api_endpoints", f"FAILED: {e}"))
             return False
     
+    @pytest.mark.asyncio
+    
     async def test_embedding_configuration(self):
         """Test embedding configuration and environment setup"""
         print("\n=== Testing Embedding Configuration ===")
@@ -376,6 +431,8 @@ class ComprehensiveVectorEmbeddingTest:
             print(f"✗ Configuration test failed: {e}")
             self.test_results.append(("test_embedding_configuration", f"FAILED: {e}"))
             return False
+    
+    @pytest.mark.asyncio
     
     async def test_postgresql_vector_extension(self):
         """Test PostgreSQL vector extension status"""
@@ -433,36 +490,48 @@ class ComprehensiveVectorEmbeddingTest:
         print("Starting Comprehensive Vector Embedding Tests")
         print("=" * 80)
         
-        # Run tests in logical order
-        await self.test_embedding_configuration()
-        await self.test_postgresql_vector_extension()
-        await self.test_basic_embedding_generation()
-        await self.test_direct_api_embedding()
-        await self.test_store_field_embedding()
-        await self.test_search_similar_values()
-        await self.test_sync_table_data()
-        await self.test_query_preprocessor_with_vector()
-        await self.test_api_endpoints()
+        try:
+            # Clear any existing test data
+            await clear_test_data()
+            
+            # Run tests in logical order
+            await self.test_embedding_configuration()
+            await self.test_postgresql_vector_extension()
+            await self.test_basic_embedding_generation()
+            await self.test_direct_api_embedding()
+            await self.test_store_field_embedding()
+            await self.test_search_similar_values()
+            await self.test_sync_table_data()
+            await self.test_query_preprocessor_with_vector()
+            await self.test_api_endpoints()
         
-        # Print summary
-        print("\n" + "=" * 80)
-        print("Test Summary")
-        print("=" * 80)
-        
-        passed = sum(1 for _, status in self.test_results if status == "PASSED")
-        failed = sum(1 for _, status in self.test_results if "FAILED" in status)
-        skipped = sum(1 for _, status in self.test_results if "SKIPPED" in status)
-        
-        for test_name, status in self.test_results:
-            status_symbol = "✓" if status == "PASSED" else "✗" if "FAILED" in status else "⊘"
-            print(f"{status_symbol} {test_name}: {status}")
-        
-        print(f"\nTotal: {len(self.test_results)} tests")
-        print(f"Passed: {passed}")
-        print(f"Failed: {failed}")
-        print(f"Skipped: {skipped}")
-        
-        return failed == 0
+            # Print summary
+            print("\n" + "=" * 80)
+            print("Test Summary")
+            print("=" * 80)
+            
+            passed = sum(1 for _, status in self.test_results if status == "PASSED")
+            failed = sum(1 for _, status in self.test_results if "FAILED" in status)
+            skipped = sum(1 for _, status in self.test_results if "SKIPPED" in status)
+            
+            for test_name, status in self.test_results:
+                status_symbol = "✓" if status == "PASSED" else "✗" if "FAILED" in status else "⊘"
+                print(f"{status_symbol} {test_name}: {status}")
+            
+            print(f"\nTotal: {len(self.test_results)} tests")
+            print(f"Passed: {passed}")
+            print(f"Failed: {failed}")
+            print(f"Skipped: {skipped}")
+            
+            return failed == 0
+            
+        except Exception as e:
+            print(f"❌ Test suite failed with error: {e}")
+            return False
+        finally:
+            # Clean up test data
+            print("\n🧹 Cleaning up test data...")
+            await clear_test_data()
 
 async def main():
     """Main test runner"""

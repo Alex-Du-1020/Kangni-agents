@@ -4,6 +4,7 @@ History Endpoint Test Suite for Kangni Agents
 Tests all history-related API endpoints with mocked data
 """
 import asyncio
+import pytest
 import sys
 import os
 import time
@@ -13,6 +14,9 @@ from typing import Dict, Any, Optional
 
 # Add src to path for imports
 sys.path.insert(0, str(Path(__file__).parent / "../.."))
+
+from kangni_agents.models.history import QueryHistory, UserFeedback, UserComment, Memory
+from kangni_agents.models.database import get_db_config
 
 # Configure logging
 logging.basicConfig(
@@ -25,6 +29,44 @@ logger = logging.getLogger(__name__)
 BASE_URL = "http://localhost:8000"
 TEST_EMAIL = "test@example.com"
 TEST_SESSION = "test-session-001"
+
+
+async def clear_test_data(test_emails=None):
+    """Clear test data from the database for specific users
+    
+    Args:
+        test_emails: List of email addresses to clear data for. If None, clears all data.
+    """
+    if test_emails is None:
+        test_emails = [
+            "test@example.com", "other@example.com", "alice@example.com", 
+            "bob@example.com", "nonexistent@example.com"
+        ]
+    
+    print(f"🧹 Clearing test data for emails: {test_emails}")
+    
+    try:
+        db_config = get_db_config()
+        with db_config.session_scope() as session:
+            
+            # 2. Clear memories for test users
+            session.query(Memory).filter(Memory.user_email.in_(test_emails)).delete()
+            
+            # 3. Clear comments for test users
+            session.query(UserComment).filter(UserComment.user_email.in_(test_emails)).delete()
+            
+            # 4. Clear feedback for test users
+            session.query(UserFeedback).filter(UserFeedback.user_email.in_(test_emails)).delete()
+            
+            # 5. Clear query history for test users
+            session.query(QueryHistory).filter(QueryHistory.user_email.in_(test_emails)).delete()
+            
+            session.commit()
+            print("✅ Test data cleared successfully")
+            
+    except Exception as e:
+        print(f"❌ Error clearing test data: {e}")
+        raise
 
 
 class HistoryEndpointTests:
@@ -110,6 +152,8 @@ class HistoryEndpointTests:
             print(f"❌ Failed to setup test data: {e}")
             return False
     
+    @pytest.mark.asyncio
+    
     async def test_get_user_history(self):
         """Test GET /qomo/v1/history/user/{email}"""
         print("\n1️⃣ Testing GET /qomo/v1/history/user/{email}...")
@@ -145,6 +189,8 @@ class HistoryEndpointTests:
             self.results["user_history"] = {"success": False, "error": str(e)}
             return False
     
+    @pytest.mark.asyncio
+    
     async def test_get_session_history(self):
         """Test GET /qomo/v1/history/session/{session_id}"""
         print("\n2️⃣ Testing GET /qomo/v1/history/session/{session_id}...")
@@ -171,6 +217,8 @@ class HistoryEndpointTests:
             self.results["session_history"] = {"success": False, "error": str(e)}
             return False
     
+    @pytest.mark.asyncio
+    
     async def test_search_history(self):
         """Test GET /qomo/v1/history/search"""
         print("\n3️⃣ Testing GET /qomo/v1/history/search...")
@@ -194,6 +242,8 @@ class HistoryEndpointTests:
             self.results["search"] = {"success": False, "error": str(e)}
             return False
     
+    @pytest.mark.asyncio
+    
     async def test_recent_queries(self):
         """Test GET /qomo/v1/history/recent"""
         print("\n4️⃣ Testing GET /qomo/v1/history/recent...")
@@ -214,6 +264,8 @@ class HistoryEndpointTests:
             print(f"❌ Error: {e}")
             self.results["recent"] = {"success": False, "error": str(e)}
             return False
+    
+    @pytest.mark.asyncio
     
     async def test_add_feedback(self):
         """Test POST /qomo/v1/history/feedback"""
@@ -252,6 +304,8 @@ class HistoryEndpointTests:
             self.results["feedback"] = {"success": False, "error": str(e)}
             return False
     
+    @pytest.mark.asyncio
+    
     async def test_add_comment(self):
         """Test POST /qomo/v1/history/comment"""
         print("\n6️⃣ Testing POST /qomo/v1/history/comment...")
@@ -278,6 +332,8 @@ class HistoryEndpointTests:
             print(f"❌ Error: {e}")
             self.results["comment"] = {"success": False, "error": str(e)}
             return False
+    
+    @pytest.mark.asyncio
     
     async def test_get_comments(self):
         """Test GET /qomo/v1/history/comments/{query_id}"""
@@ -327,6 +383,8 @@ class HistoryEndpointTests:
             self.results["get_comments"] = {"success": False, "error": str(e)}
             return False
     
+    @pytest.mark.asyncio
+    
     async def test_feedback_stats(self):
         """Test GET /qomo/v1/history/feedback/stats/{query_id}"""
         print("\n8️⃣ Testing GET /qomo/v1/history/feedback/stats/{query_id}...")
@@ -351,6 +409,8 @@ class HistoryEndpointTests:
             print(f"❌ Error: {e}")
             self.results["stats"] = {"success": False, "error": str(e)}
             return False
+    
+    @pytest.mark.asyncio
     
     async def test_api_endpoints(self):
         """Test actual API endpoints if server is running"""
@@ -422,52 +482,64 @@ class HistoryEndpointTests:
         print("🚀 Starting History Endpoint Tests")
         print("=" * 60)
         
-        # Setup test data
-        if not await self.setup_test_data():
-            print("❌ Failed to setup test data, aborting tests")
-            return
+        try:
+            # Clear any existing test data
+            await clear_test_data()
+            
+            # Setup test data
+            if not await self.setup_test_data():
+                print("❌ Failed to setup test data, aborting tests")
+                return
         
-        # Run all tests
-        test_methods = [
-            self.test_get_user_history,
-            self.test_get_session_history,
-            self.test_search_history,
-            self.test_recent_queries,
-            self.test_add_feedback,
-            self.test_add_comment,
-            self.test_get_comments,
-            self.test_feedback_stats,
-            self.test_api_endpoints
-        ]
-        
-        passed = 0
-        failed = 0
-        
-        for test_method in test_methods:
-            try:
-                if await test_method():
-                    passed += 1
-                else:
+            # Run all tests
+            test_methods = [
+                self.test_get_user_history,
+                self.test_get_session_history,
+                self.test_search_history,
+                self.test_recent_queries,
+                self.test_add_feedback,
+                self.test_add_comment,
+                self.test_get_comments,
+                self.test_feedback_stats,
+                self.test_api_endpoints
+            ]
+            
+            passed = 0
+            failed = 0
+            
+            for test_method in test_methods:
+                try:
+                    if await test_method():
+                        passed += 1
+                    else:
+                        failed += 1
+                except Exception as e:
+                    print(f"❌ Test {test_method.__name__} failed with error: {e}")
                     failed += 1
-            except Exception as e:
-                print(f"❌ Test {test_method.__name__} failed with error: {e}")
-                failed += 1
-        
-        # Print summary
-        print("\n" + "=" * 60)
-        print("📊 TEST SUMMARY")
-        print("=" * 60)
-        print(f"Total tests: {passed + failed}")
-        print(f"Passed: {passed}")
-        print(f"Failed: {failed}")
-        print(f"Success rate: {(passed/(passed+failed)*100):.1f}%")
-        
-        if failed == 0:
-            print("\n✅ All history endpoint tests passed!")
-        else:
-            print(f"\n❌ {failed} test(s) failed")
-        
-        return failed == 0
+            
+            # Print summary
+            print("\n" + "=" * 60)
+            print("📊 TEST SUMMARY")
+            print("=" * 60)
+            print(f"Total tests: {passed + failed}")
+            print(f"Passed: {passed}")
+            print(f"Failed: {failed}")
+            print(f"Success rate: {(passed/(passed+failed)*100):.1f}%")
+            
+            if failed == 0:
+                print("\n✅ All history endpoint tests passed!")
+            else:
+                print(f"\n❌ {failed} test(s) failed")
+            
+            return failed == 0
+            
+        except Exception as e:
+            print(f"❌ Test suite failed with error: {e}")
+            return False
+        finally:
+            # Clean up test data
+            print("\n🧹 Cleaning up test data...")
+            await clear_test_data()
 
 
 async def main():

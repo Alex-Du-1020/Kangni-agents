@@ -5,6 +5,7 @@ LLM连接测试脚本
 """
 
 import asyncio
+import pytest
 import sys
 import os
 from pathlib import Path
@@ -31,6 +32,8 @@ import logging
 # 配置日志
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+@pytest.mark.asyncio
 
 async def test_llm_provider(provider_name: str):
     """测试指定的LLM提供商"""
@@ -76,6 +79,8 @@ async def test_llm_provider(provider_name: str):
         print(f"❌ {provider_name} 测试失败: {str(e)}")
         logger.exception(f"Error testing {provider_name}")
         return False
+
+@pytest.mark.asyncio
 
 async def test_current_config():
     """测试当前配置的LLM提供商"""

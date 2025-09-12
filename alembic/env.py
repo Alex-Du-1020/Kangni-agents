@@ -17,21 +17,16 @@ from kangni_agents.models.history import Base
 
 # Get database URL based on environment
 import os
-db_type = os.getenv('DB_TYPE', 'sqlite')
-if db_type == 'postgresql':
-    # Use PostgreSQL configuration from environment
-    host = os.getenv('POSTGRES_HOST', 'localhost')
-    port = os.getenv('POSTGRES_PORT', '5432')
-    user = os.getenv('POSTGRES_USER', 'postgres')
-    password = os.getenv('POSTGRES_PASSWORD', 'postgres')
-    database = os.getenv('POSTGRES_DATABASE', 'kangni_ai_chatbot')
-    database_url = f"postgresql://{user}:{password}@{host}:{port}/{database}"
-    print(f"Using PostgreSQL database: {database}")
-else:
-    # Default to SQLite
-    db_path = os.path.join(Path(__file__).parent.parent, "src", "resources", "history.db")
-    database_url = f"sqlite:///{db_path}"
-    print(f"Using SQLite database at: {db_path}")
+
+# Use PostgreSQL configuration from environment
+host = os.getenv('POSTGRES_HOST', 'localhost')
+port = os.getenv('POSTGRES_PORT', '5432')
+user = os.getenv('POSTGRES_USER', 'postgres')
+password = os.getenv('POSTGRES_PASSWORD', 'postgres')
+database = os.getenv('POSTGRES_DATABASE', 'kangni_ai_chatbot')
+database_url = f"postgresql://{user}:{password}@{host}:{port}/{database}"
+print(f"Using PostgreSQL database: {database}")
+
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

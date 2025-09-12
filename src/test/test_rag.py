@@ -1,6 +1,7 @@
 """测试RAG搜索功能"""
 
 import sys
+import pytest
 import os
 import asyncio
 import logging
@@ -16,14 +17,21 @@ except ImportError as e:
     print("Make sure you're running from the project root directory")
     sys.exit(1)
 
-# Configure logging for debug level
+# Configure logging to reduce verbosity and hide HTTPS info
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=logging.INFO,  # Only show warnings and errors
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     handlers=[
         logging.StreamHandler(sys.stdout)
     ]
 )
+
+# Suppress specific loggers that might print HTTPS info
+logging.getLogger("urllib3").setLevel(logging.ERROR)
+logging.getLogger("requests").setLevel(logging.ERROR)
+logging.getLogger("httpx").setLevel(logging.ERROR)
+
+@pytest.mark.asyncio
 
 async def test_rag_search():
     """测试RAG搜索功能"""
@@ -49,13 +57,14 @@ async def test_rag_search():
         print(f"❌ Error checking RAG service availability: {e}")
         return
     
-    # 测试用户问题
+    # # 测试用户问题
     query = "内解锁接地线线束短，无法安装到紧固螺钉位置是那个项目发生的？"
     print(f"\n2. Testing RAG search with query: {query}")
     
     try:
         # 使用默认数据集进行搜索
         results = await rag_service.search_rag(query, settings.ragflow_default_dataset_id, top_k=5)
+        assert len(results) == 5
         
         # 确保results不为None
         if results is None:
@@ -67,7 +76,7 @@ async def test_rag_search():
             print(f"   内容预览: {result.content[:200]}...")
             if result.metadata:
                 print(f"   元数据: {result.metadata}")
-        
+
         # 检查是否找到相关结果
         if results:
             print(f"\n✅ 测试通过：找到 {len(results)} 条相关记录")
@@ -118,7 +127,7 @@ async def test_rag_search():
                     
                     # 收集所有内容用于关键词检查
                     db_content_text += " ".join([result.content for result in results])
-            
+            assert total_results > 10
             print(f"\n✅ 测试通过：总共找到 {total_results} 条相关记录")
             
             # 检查是否包含预期的项目信息
@@ -140,6 +149,31 @@ async def test_rag_search():
         
     except Exception as e:
         print(f"❌ 数据库上下文搜索测试失败: {e}")
+        import traceback
+        traceback.print_exc()
+    
+    # 测试LLM答案生成
+    print(f"\n4. Testing LLM answer generation...")
+    try:
+        # 使用之前搜索到的结果进行LLM答案生成
+        if results:
+            answer = await rag_service.generate_answer_with_llm(query, results)
+            print(f"✅ LLM生成的答案:")
+            print(f"   长度: {len(answer)} 字符")
+            print(f"   预览: {answer[:200]}...")
+        else:
+            print("⚠️ 没有搜索结果可用于LLM答案生成")
+        
+        # 测试组合搜索和答案生成
+        print(f"\n5. Testing combined search with answer generation...")
+        combined_result = await rag_service.search_rag_with_answer(query, settings.ragflow_default_dataset_id, top_k=3)
+        print(f"✅ 组合结果:")
+        print(f"   答案长度: {len(combined_result['answer'])} 字符")
+        print(f"   搜索结果数量: {combined_result['total_results']}")
+        print(f"   答案预览: {combined_result['answer'][:200]}...")
+        
+    except Exception as e:
+        print(f"❌ LLM答案生成测试失败: {e}")
         import traceback
         traceback.print_exc()
 

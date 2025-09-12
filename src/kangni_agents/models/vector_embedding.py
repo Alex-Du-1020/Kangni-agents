@@ -1,30 +1,16 @@
 """
 Database models for vector embeddings.
 """
-from sqlalchemy import Column, Integer, String, Text, DateTime, UniqueConstraint, Index, Float
+from sqlalchemy import Column, Integer, String, Text, DateTime, UniqueConstraint, Index
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.sql import func
-from datetime import datetime
-import os
 
 Base = declarative_base()
 
-# Determine database type
-db_type = os.getenv('DB_TYPE', 'sqlite').lower()
-
-if db_type == 'postgresql':
-    try:
-        # Try to use pgvector if available
-        from pgvector.sqlalchemy import Vector
-        # BGE-M3 typically generates 1024-dimensional embeddings
-        EmbeddingColumn = Vector(1024)
-    except ImportError:
-        # Fallback to ARRAY if pgvector is not installed
-        from sqlalchemy.dialects.postgresql import ARRAY
-        EmbeddingColumn = ARRAY(Float)
-else:
-    # For SQLite, use Text to store JSON
-    EmbeddingColumn = Text
+# Try to use pgvector if available
+from pgvector.sqlalchemy import Vector
+# BGE-M3 typically generates 1024-dimensional embeddings
+EmbeddingColumn = Vector(1024)
 
 class FieldValueEmbedding(Base):
     """

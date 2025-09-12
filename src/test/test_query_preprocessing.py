@@ -7,13 +7,15 @@ Test the query preprocessor improvements
 import sys
 import asyncio
 from pathlib import Path
+import pytest
 
 # Add src to path for imports
 sys.path.insert(0, str(Path(__file__).parent / "../.."))
 
 from kangni_agents.utils.query_preprocessor import query_preprocessor
 
-def test_query_preprocessing():
+@pytest.mark.asyncio
+async def test_query_preprocessing():
     """测试查询预处理功能"""
     
     # 测试用例
@@ -58,7 +60,7 @@ def test_query_preprocessing():
         print(f"原始查询: {case['query']}")
         
         # 预处理查询
-        result = query_preprocessor.preprocess_query(case['query'])
+        result = await query_preprocessor.preprocess_query(case['query'])
         
         print(f"处理后查询: {result.processed_query}")
         print(f"提取实体数: {len(result.entities)} (预期: {case['expected_entities']})")
@@ -91,7 +93,8 @@ def test_query_preprocessing():
         if not success:
             print(f"⚠️  预期 {case['expected_entities']} 个实体，实际找到 {len(result.entities)} 个")
 
-def test_sql_hint_generation():
+@pytest.mark.asyncio
+async def test_sql_hint_generation():
     """测试SQL提示生成"""
     print("\n" + "=" * 80)
     print("🔧 测试SQL提示生成")
@@ -99,7 +102,7 @@ def test_sql_hint_generation():
     
     # 测试复杂查询
     complex_query = "#合肥S1号线项目乘客室门#这个项目一共有多少个订单？"
-    result = query_preprocessor.preprocess_query(complex_query)
+    result = await query_preprocessor.preprocess_query(complex_query)
     
     # 模拟基础提示
     base_prompt = """你是SQL生成助手。
@@ -123,7 +126,8 @@ def test_sql_hint_generation():
     print(f"\n占位符SQL: {test_sql}")
     print(f"恢复后SQL: {restored_sql}")
 
-def test_field_mapping():
+@pytest.mark.asyncio
+async def test_field_mapping():
     """测试字段映射功能"""
     print("\n" + "=" * 80)
     print("🗺️  测试字段映射功能")
@@ -139,7 +143,7 @@ def test_field_mapping():
     
     for query in field_queries:
         print(f"\n查询: {query}")
-        result = query_preprocessor.preprocess_query(query)
+        result = await query_preprocessor.preprocess_query(query)
         
         if "field_mapping" in result.sql_hints:
             print("字段映射建议:")
@@ -147,7 +151,8 @@ def test_field_mapping():
         else:
             print("未检测到特定字段映射")
 
-def test_enhanced_preprocessing():
+@pytest.mark.asyncio
+async def test_enhanced_preprocessing():
     """Test the enhanced preprocessing logic with detailed output"""
     print("\n" + "=" * 80)
     print("🧪 测试增强的查询预处理器（详细输出）")
@@ -157,7 +162,7 @@ def test_enhanced_preprocessing():
     print(f"测试查询: {query}")
     
     # Preprocess the query
-    result = query_preprocessor.preprocess_query(query)
+    result = await query_preprocessor.preprocess_query(query)
     
     print(f"\n📝 预处理结果:")
     print(f"原始查询: {result.original_query}")
@@ -207,17 +212,17 @@ def test_enhanced_preprocessing():
     print(f"而不是: WHERE projectname_s LIKE '%合肥S1号线%' AND partname_s LIKE '%乘客室门%'")
 
 
-def main():
+async def main():
     """主函数"""
     print("🚀 查询预处理器测试")
     print("用于验证特殊标记处理和SQL生成改进")
     
     try:
         # 运行测试
-        test_query_preprocessing()
-        test_sql_hint_generation()
-        test_field_mapping()
-        test_enhanced_preprocessing()  # Add the enhanced test
+        await test_query_preprocessing()
+        await test_sql_hint_generation()
+        await test_field_mapping()
+        await test_enhanced_preprocessing()  # Add the enhanced test
         
         print("\n" + "=" * 80)
         print("✨ 测试完成!")
@@ -240,4 +245,4 @@ def main():
         traceback.print_exc()
 
 if __name__ == "__main__":
-    main()
+    asyncio.run(main())

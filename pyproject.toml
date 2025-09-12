@@ -37,6 +37,7 @@ packages = ["src/kangni_agents"]
 [project.optional-dependencies]
 dev = [
     "pytest",
+    "pytest-asyncio",
     "black",
     "flake8",
     "mypy",

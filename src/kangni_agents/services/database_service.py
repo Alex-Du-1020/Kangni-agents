@@ -92,7 +92,11 @@ class DatabaseService:
             logger.error(f"Unexpected error executing SQL: {e}")
             raise RuntimeError(f"Database service error: {str(e)}")
     
-    async def generate_sql_from_context(self, question: str, context_data: Dict[str, List[RAGSearchResult]]) -> Optional[str]:
+    async def generate_sql_from_context(self, question: str, 
+        context_data: Dict[str, List[RAGSearchResult]], 
+        memory_context: Optional[Dict[str, Any]] = None
+        ) -> Optional[str]:
+
         """基于RAG搜索结果生成SQL查询"""
         if not self.llm_available:
             logger.warning("LLM not available, cannot generate SQL from context")
@@ -109,7 +113,7 @@ class DatabaseService:
             db_description = "\n".join([r.content for r in context_data.get("description", [])])
             
             # 3. 构建基础系统提示
-            base_system_prompt = """你是一个专业的SQL生成助手。基于提供的数据库结构、查询示例和描述信息，为用户问题生成准确的SQL查询。
+            base_system_prompt = f"""你是一个专业的SQL生成助手。基于提供的数据库结构、查询示例和描述信息，为用户问题生成准确的SQL查询。
 
 必须遵守这些要求：
 1. 只返回SQL查询语句，不要添加额外的解释
@@ -119,6 +123,8 @@ class DatabaseService:
 5. 如果问题不够明确或缺少必要信息，返回 "INSUFFICIENT_INFO"
 
 特别注意：当用户提到"订单"但没有指定具体类型时，默认查询表 kn_quality_trace_prod_order（生产订单表）
+
+{memory_context}
 
 数据库结构信息：
 {ddl_context}
@@ -165,7 +171,7 @@ class DatabaseService:
             logger.error(f"Error generating SQL: {e}")
             return None
     
-    async def query_database(self, question: str) -> Dict[str, Any]:
+    async def query_database(self, question: str, memory_context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         """完整的数据库查询流程"""
         try:
             
@@ -173,7 +179,7 @@ class DatabaseService:
             context_data = await rag_service.search_db_context(question)
             
             # 2. 生成SQL查询
-            sql_query = await self.generate_sql_from_context(question, context_data)
+            sql_query = await self.generate_sql_from_context(question, context_data, memory_context)
             
             if not sql_query:
                 return {

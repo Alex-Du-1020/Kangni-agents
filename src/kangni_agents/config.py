@@ -19,9 +19,6 @@ class Settings(BaseSettings):
     mysql_database: Optional[str] = None
     mysql_port: int = 3306
     
-    # History database configuration (SQLite for testing)
-    history_database_url: Optional[str] = None  # If not set, will use SQLite
-    
     # API设置
     api_host: str = "0.0.0.0"
     api_port: int = 8000

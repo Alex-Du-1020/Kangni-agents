@@ -75,9 +75,8 @@ class HistoryService:
                 session.flush()  # Get the ID
                 history_id = history.id
                 logger.info(f"Saved query history with ID: {history_id}")
-                # Return a simple object with just the ID
-                result = type('QueryHistory', (), {'id': history_id})()
-                return result
+                # Return a simple object with the ID to avoid session issues
+                return type('QueryHistoryResult', (), {'id': history_id, 'history': history})()
         except Exception as e:
             logger.error(f"Failed to save query history: {e}")
             raise

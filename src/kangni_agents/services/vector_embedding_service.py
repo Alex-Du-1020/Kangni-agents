@@ -28,24 +28,15 @@ class VectorEmbeddingService:
         Args:
             database_service: Database service for data access
         """
-        self.db_type = os.getenv('DB_TYPE', 'sqlite').lower()
-        
-        # Initialize database connection for embedding tables
-        if self.db_type == 'postgresql':
-            db_url = (
-                f"postgresql://{os.getenv('POSTGRES_USER')}:"
-                f"{os.getenv('POSTGRES_PASSWORD')}@"
-                f"{os.getenv('POSTGRES_HOST')}:"
-                f"{os.getenv('POSTGRES_PORT')}/"
-                f"{os.getenv('POSTGRES_DATABASE')}"
-            )
-        else:
-            # Ensure the directory exists
-            resources_dir = os.path.join(os.path.dirname(__file__), '..', 'resources')
-            os.makedirs(resources_dir, exist_ok=True)
-            db_path = os.path.join(resources_dir, 'history.db')
-            db_url = f"sqlite:///{db_path}"
-        
+
+        db_url = (
+            f"postgresql://{os.getenv('POSTGRES_USER')}:"
+            f"{os.getenv('POSTGRES_PASSWORD')}@"
+            f"{os.getenv('POSTGRES_HOST')}:"
+            f"{os.getenv('POSTGRES_PORT')}/"
+            f"{os.getenv('POSTGRES_DATABASE')}"
+        )
+
         self.engine = create_engine(db_url)
         self.SessionLocal = sessionmaker(bind=self.engine)
     
@@ -167,15 +158,10 @@ class VectorEmbeddingService:
             
             # Generate new embedding
             embedding = await self.generate_embedding(field_value)
-            
-            # Store embedding based on database type
-            if self.db_type == 'postgresql':
-                # For PostgreSQL with pgvector, store as array directly
-                # pgvector will handle the conversion
-                embedding_data = embedding
-            else:
-                # For SQLite, store as JSON string
-                embedding_data = json.dumps(embedding)
+
+            # For PostgreSQL with pgvector, store as array directly
+            # pgvector will handle the conversion
+            embedding_data = embedding
             
             # Create new embedding record
             new_embedding = FieldValueEmbedding(
@@ -316,65 +302,32 @@ class VectorEmbeddingService:
             search_embedding = await self.generate_embedding(search_text)
             
             with self.SessionLocal() as session:
-                if self.db_type == 'postgresql':
-                    # Check if we're using pgvector or ARRAY
-                    # Try pgvector query first
-                    # Convert Python list to PostgreSQL array format string
-                    embedding_str = '[' + ','.join(map(str, search_embedding)) + ']'
-                        
-                    query = text("""
-                        SELECT id, field_value, 
-                                1 - (embedding <-> CAST(:search_embedding AS vector)) as similarity
-                        FROM field_value_embeddings
-                        WHERE table_name = :table_name 
-                            AND field_name = :field_name
-                        ORDER BY embedding <-> CAST(:search_embedding AS vector)
-                        LIMIT :top_k
-                    """)
-                        
-                    results = session.execute(
-                        query,
-                        {
-                            'search_embedding': embedding_str,
-                            'table_name': table_name,
-                            'field_name': field_name,
-                            'top_k': top_k
-                        }
-                    ).fetchall()
+
+                # Check if we're using pgvector or ARRAY
+                # Try pgvector query first
+                # Convert Python list to PostgreSQL array format string
+                embedding_str = '[' + ','.join(map(str, search_embedding)) + ']'
                     
-                else:
-                    # For SQLite, fetch all embeddings and compute similarity in Python
-                    embeddings = session.query(FieldValueEmbedding).filter(
-                        and_(
-                            FieldValueEmbedding.table_name == table_name,
-                            FieldValueEmbedding.field_name == field_name
-                        )
-                    ).all()
+                query = text("""
+                    SELECT id, field_value, 
+                            1 - (embedding <-> CAST(:search_embedding AS vector)) as similarity
+                    FROM field_value_embeddings
+                    WHERE table_name = :table_name 
+                        AND field_name = :field_name
+                    ORDER BY embedding <-> CAST(:search_embedding AS vector)
+                    LIMIT :top_k
+                """)
                     
-                    # Compute cosine similarity
-                    similarities = []
-                    search_vec = np.array(search_embedding)
-                    
-                    for emb in embeddings:
-                        stored_vec = np.array(json.loads(emb.embedding))
-                        
-                        # Cosine similarity
-                        similarity = np.dot(search_vec, stored_vec) / (
-                            np.linalg.norm(search_vec) * np.linalg.norm(stored_vec)
-                        )
-                        
-                        if similarity >= similarity_threshold:
-                            similarities.append({
-                                'id': emb.id,
-                                'field_value': emb.field_value,
-                                'similarity': float(similarity)
-                            })
-                    
-                    # Sort by similarity and take top_k
-                    similarities.sort(key=lambda x: x['similarity'], reverse=True)
-                    results = similarities[:top_k]
-                    
-                    return results
+                results = session.execute(
+                    query,
+                    {
+                        'search_embedding': embedding_str,
+                        'table_name': table_name,
+                        'field_name': field_name,
+                        'top_k': top_k
+                    }
+                ).fetchall()
+        
                 
                 # Format PostgreSQL results
                 return [

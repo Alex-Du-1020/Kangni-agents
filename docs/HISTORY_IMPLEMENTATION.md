@@ -60,14 +60,6 @@ The main `/qomo/v1/query` endpoint now automatically:
 # No configuration needed
 ```
 
-### MySQL/PostgreSQL (Production)
-```python
-# Set in .env file:
-HISTORY_DATABASE_URL=mysql://user:pass@host/dbname
-# or
-HISTORY_DATABASE_URL=postgresql://user:pass@host/dbname
-```
-
 ## Migration Management
 
 Using Alembic for database migrations:
@@ -180,7 +172,6 @@ sqlalchemy-utils>=0.41.0  # Optional, for database creation
 - ✅ Processing time tracking
 - ✅ LLM provider tracking
 - ✅ Error tracking for failed queries
-- ✅ SQLite support for testing
 - ✅ MySQL/PostgreSQL support for production
 - ✅ Alembic migrations
 

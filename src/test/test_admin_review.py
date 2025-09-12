@@ -3,19 +3,57 @@
 Test the admin review endpoint for dislike feedback
 """
 import asyncio
+import pytest
 import os
 import sys
 from datetime import datetime
 from pathlib import Path
 
-# Set SQLite for testing
-os.environ["DB_TYPE"] = "sqlite"
-
 # Add src to path
 sys.path.insert(0, str(Path(__file__).parent / "../.."))
 
 from src.kangni_agents.services.history_service import history_service
-from src.kangni_agents.models.history import FeedbackType
+from src.kangni_agents.models.history import QueryHistory, UserFeedback, UserComment, Memory
+from src.kangni_agents.models.database import get_db_config
+
+
+async def clear_test_data(test_emails=None):
+    """Clear test data from the database for specific users
+    
+    Args:
+        test_emails: List of email addresses to clear data for. If None, clears all data.
+    """
+    if test_emails is None:
+        test_emails = [
+            "admin-test-001", "admin-test-002", "admin-test-003",
+            "user1@example.com", "user2@example.com", "user3@example.com", 
+            "user4@example.com", "user5@example.com", "admin@example.com"
+        ]
+    
+    print(f"🧹 Clearing test data for emails: {test_emails}")
+    
+    try:
+        db_config = get_db_config()
+        with db_config.session_scope() as session:
+            
+            # 1. Clear memories for test users
+            session.query(Memory).filter(Memory.user_email.in_(test_emails)).delete()
+            
+            # 2. Clear comments for test users
+            session.query(UserComment).filter(UserComment.user_email.in_(test_emails)).delete()
+            
+            # 3. Clear feedback for test users
+            session.query(UserFeedback).filter(UserFeedback.user_email.in_(test_emails)).delete()
+            
+            # 4. Clear query history for test users
+            session.query(QueryHistory).filter(QueryHistory.user_email.in_(test_emails)).delete()
+            
+            session.commit()
+            print("✅ Test data cleared successfully")
+            
+    except Exception as e:
+        print(f"❌ Error clearing test data: {e}")
+        raise
 
 
 async def setup_test_data():
@@ -102,6 +140,9 @@ async def setup_test_data():
     return query_ids
 
 
+@pytest.mark.asyncio
+
+
 async def test_admin_review_endpoint():
     """Test the admin review endpoint"""
     print("\n" + "=" * 60)
@@ -167,6 +208,9 @@ async def test_admin_review_endpoint():
     print("✅ Admin Review Endpoint Test Complete!")
 
 
+@pytest.mark.asyncio
+
+
 async def test_api_endpoint():
     """Test via actual API if server is running"""
     print("\n" + "=" * 60)
@@ -211,24 +255,33 @@ async def main():
     print("🚀 Admin Review Endpoint Test Suite")
     print("Testing dislike feedback review functionality")
     
-    # Setup test data
-    query_ids = await setup_test_data()
-    
-    # Test the service method
-    await test_admin_review_endpoint()
-    
-    # Test via API if available
-    await test_api_endpoint()
-    
-    print("\n" + "=" * 60)
-    print("📊 Summary:")
-    print("The admin review endpoint allows filtering by:")
-    print("  • Days: 1, 3, 5, 7 (or any value 1-30)")
-    print("  • Returns: Queries with dislikes, ordered by created time")
-    print("  • feedback_stats: Array of dislike comments from users who gave dislike feedback")
-    print("  • Only includes comments from users who disliked the query")
-    print("\nEndpoint: GET /qomo/v1/history/admin/dislike-review")
-    print("Parameters: ?days=7&limit=100")
+    try:
+        # Clear any existing test data
+        await clear_test_data()
+        
+        # Setup test data
+        query_ids = await setup_test_data()
+        
+        # Test the service method
+        await test_admin_review_endpoint()
+        
+        # Test via API if available
+        await test_api_endpoint()
+        
+        print("\n" + "=" * 60)
+        print("📊 Summary:")
+        print("The admin review endpoint allows filtering by:")
+        print("  • Days: 1, 3, 5, 7 (or any value 1-30)")
+        print("  • Returns: Queries with dislikes, ordered by created time")
+        print("  • feedback_stats: Array of dislike comments from users who gave dislike feedback")
+        print("  • Only includes comments from users who disliked the query")
+        print("\nEndpoint: GET /qomo/v1/history/admin/dislike-review")
+        print("Parameters: ?days=7&limit=100")
+        
+    finally:
+        # Clean up test data
+        print("\n🧹 Cleaning up test data...")
+        await clear_test_data()
 
 
 if __name__ == "__main__":

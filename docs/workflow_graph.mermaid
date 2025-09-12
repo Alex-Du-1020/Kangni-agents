@@ -5,6 +5,7 @@ config:
 ---
 graph TD;
 	__start__([<p>__start__</p>]):::first
+	load_memory(load_memory)
 	classify_intent(classify_intent)
 	agent_reasoning(agent_reasoning)
 	tool_execution(tool_execution)
@@ -12,17 +13,20 @@ graph TD;
 	vector_search(vector_search)
 	fallback_search(fallback_search)
 	generate_response(generate_response)
+	save_memory(save_memory)
 	__end__([<p>__end__</p>]):::last
-	__start__ --> classify_intent;
+	__start__ --> load_memory;
 	agent_reasoning --> tool_execution;
 	classify_intent --> agent_reasoning;
 	fallback_search --> generate_response;
+	generate_response --> save_memory;
+	load_memory --> classify_intent;
 	tool_execution --> validate_results;
 	validate_results -.-> fallback_search;
 	validate_results -.-> generate_response;
 	validate_results -.-> vector_search;
 	vector_search --> generate_response;
-	generate_response --> __end__;
+	save_memory --> __end__;
 	classDef default fill:#f2f0ff,line-height:1.2
 	classDef first fill-opacity:0
 	classDef last fill:#bfb6fc

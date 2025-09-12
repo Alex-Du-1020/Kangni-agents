@@ -45,6 +45,7 @@ class DatabaseQueryRequest(BaseModel):
 class QueryResponse(BaseModel):
     answer: str
     query_type: QueryType
+    session_id: Optional[str] = None  # Return the session ID used for this query
     sources: Optional[List[RAGSearchResult]] = None
     sql_query: Optional[str] = None
     confidence: Optional[float] = None

@@ -4,6 +4,7 @@ Test script for vector sync and improved agent workflow
 """
 
 import asyncio
+import pytest
 import sys
 from pathlib import Path
 
@@ -13,10 +14,51 @@ sys.path.insert(0, str(Path(__file__).parent.parent.parent))
 from src.kangni_agents.services.database_service import db_service
 from src.kangni_agents.services.vector_embedding_service import vector_service
 from src.kangni_agents.agents.react_agent import kangni_agent
+from src.kangni_agents.models.history import QueryHistory, UserFeedback, UserComment, Memory
+from src.kangni_agents.models.database import get_db_config
 
 import logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+
+async def clear_test_data(test_emails=None):
+    """Clear test data from the database for specific users
+    
+    Args:
+        test_emails: List of email addresses to clear data for. If None, clears all data.
+    """
+    if test_emails is None:
+        test_emails = ["test@example.com"]
+    
+    print(f"🧹 Clearing test data for emails: {test_emails}")
+    
+    try:
+        db_config = get_db_config()
+        with db_config.session_scope() as session:
+            
+            # 1. Clear memories for test users
+            session.query(Memory).filter(Memory.user_email.in_(test_emails)).delete()
+            
+            # 2. Clear comments for test users
+            session.query(UserComment).filter(UserComment.user_email.in_(test_emails)).delete()
+            
+            # 3. Clear feedback for test users
+            session.query(UserFeedback).filter(UserFeedback.user_email.in_(test_emails)).delete()
+            
+            # 4. Clear query history for test users
+            session.query(QueryHistory).filter(QueryHistory.user_email.in_(test_emails)).delete()
+            
+            session.commit()
+            print("✅ Test data cleared successfully")
+            
+    except Exception as e:
+        print(f"❌ Error clearing test data: {e}")
+        raise
+
+
+@pytest.mark.asyncio
+
 
 async def test_vector_sync():
     """Test the vector sync functionality"""
@@ -68,6 +110,8 @@ async def test_vector_sync():
         print(f"❌ Error during vector sync test: {e}")
         logger.error(f"Vector sync test error: {e}", exc_info=True)
         return False
+
+@pytest.mark.asyncio
 
 async def test_agent_workflow():
     """Test the improved agent workflow with vector fallback"""
@@ -122,25 +166,37 @@ async def main():
     print("TESTING VECTOR SYNC AND IMPROVED AGENT WORKFLOW")
     print("="*60)
     
-    # Test 1: Vector Sync
-    sync_success = await test_vector_sync()
-    
-    # Test 2: Agent Workflow  
-    workflow_success = await test_agent_workflow()
-    
-    # Summary
-    print("\n" + "="*50)
-    print("TEST SUMMARY")
-    print("="*50)
-    print(f"Vector Sync Test: {'✅ PASSED' if sync_success else '❌ FAILED'}")
-    print(f"Agent Workflow Test: {'✅ PASSED' if workflow_success else '❌ FAILED'}")
-    
-    if sync_success and workflow_success:
-        print("\n🎉 All tests passed successfully!")
-        return 0
-    else:
-        print("\n⚠️ Some tests failed. Please check the logs above.")
+    try:
+        # Clear any existing test data
+        await clear_test_data()
+        
+        # Test 1: Vector Sync
+        sync_success = await test_vector_sync()
+        
+        # Test 2: Agent Workflow  
+        workflow_success = await test_agent_workflow()
+        
+        # Summary
+        print("\n" + "="*50)
+        print("TEST SUMMARY")
+        print("="*50)
+        print(f"Vector Sync Test: {'✅ PASSED' if sync_success else '❌ FAILED'}")
+        print(f"Agent Workflow Test: {'✅ PASSED' if workflow_success else '❌ FAILED'}")
+        
+        if sync_success and workflow_success:
+            print("\n🎉 All tests passed successfully!")
+            return 0
+        else:
+            print("\n⚠️ Some tests failed. Please check the logs above.")
+            return 1
+            
+    except Exception as e:
+        print(f"❌ Test suite failed with error: {e}")
         return 1
+    finally:
+        # Clean up test data
+        print("\n🧹 Cleaning up test data...")
+        await clear_test_data()
 
 if __name__ == "__main__":
     exit_code = asyncio.run(main())

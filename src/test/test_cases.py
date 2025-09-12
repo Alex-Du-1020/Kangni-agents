@@ -15,14 +15,12 @@ import logging
 # Add src to path for imports
 sys.path.insert(0, str(Path(__file__).parent / "../.."))
 
-try:
-    from kangni_agents.models import UserQuery
-    from kangni_agents.agents.react_agent import kangni_agent
-    from kangni_agents.config import settings
-except ImportError as e:
-    print(f"❌ Import error: {e}")
-    print("Make sure you're running from the project root and dependencies are installed")
-    sys.exit(1)
+from kangni_agents.models import UserQuery
+from kangni_agents.agents.react_agent import kangni_agent
+from kangni_agents.config import settings
+from kangni_agents.models.history import QueryHistory, UserFeedback, UserComment, Memory
+from kangni_agents.models.database import get_db_config
+
 
 # Configure logging
 logging.basicConfig(
@@ -30,6 +28,41 @@ logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
 )
 logger = logging.getLogger(__name__)
+
+
+async def clear_test_data(test_emails=None):
+    """Clear test data from the database for specific users
+    
+    Args:
+        test_emails: List of email addresses to clear data for. If None, clears all data.
+    """
+    if test_emails is None:
+        test_emails = ["test@example.com"]
+    
+    print(f"🧹 Clearing test data for emails: {test_emails}")
+    
+    try:
+        db_config = get_db_config()
+        with db_config.session_scope() as session:
+            # 1. Clear memories for test users
+            session.query(Memory).filter(Memory.user_email.in_(test_emails)).delete()
+            
+            # 2. Clear comments for test users
+            session.query(UserComment).filter(UserComment.user_email.in_(test_emails)).delete()
+            
+            # 3. Clear feedback for test users
+            session.query(UserFeedback).filter(UserFeedback.user_email.in_(test_emails)).delete()
+            
+            # 4. Clear query history for test users
+            session.query(QueryHistory).filter(QueryHistory.user_email.in_(test_emails)).delete()
+            
+            session.commit()
+            print("✅ Test data cleared successfully")
+            
+    except Exception as e:
+        print(f"❌ Error clearing test data: {e}")
+        raise
+
 
 class TestResult:
     def __init__(self, question: str, keywords: List[str] = None, expected_sql: str = None):
@@ -117,6 +150,8 @@ async def run_single_test(question: str, keywords: List[str] = None, expected_sq
         
         # Execute query
         response = await kangni_agent.query(
+            user_email="test@example.com",  # Add required user_email for testing
+            session_id="test-session-001",   # Add session_id for testing
             question=query.question,
             context=query.context
         )
@@ -176,7 +211,7 @@ async def run_all_tests():
     failed = 0
     
     for i, test_case in enumerate(test_cases, 1):
-        if(i not in [5]):  # Test both SQL and keyword validation
+        if(i not in [15]):  # Test both SQL and keyword validation
             continue
         question = test_case.get("question", "")
         keywords = test_case.get("keywords", [])
@@ -240,10 +275,30 @@ async def run_all_tests():
                         print(f"    Expected keywords: {', '.join(result.expected_keywords)}")
                         print(f"    Found keywords: {', '.join(result.keyword_matches) if result.keyword_matches else 'None'}")
 
-def main():
+async def main():
     """主函数"""
     try:
-        asyncio.run(run_all_tests())
+        # Clear any existing test data
+        await clear_test_data()
+        
+        # Run tests
+        await run_all_tests()
+        
+    except KeyboardInterrupt:
+        print("\n🛑 Tests interrupted by user")
+    except Exception as e:
+        print(f"❌ Unexpected error: {e}")
+        sys.exit(1)
+    finally:
+        # Clean up test data
+        print("\n🧹 Cleaning up test data...")
+        await clear_test_data()
+
+
+def main_sync():
+    """Synchronous wrapper for main function"""
+    try:
+        asyncio.run(main())
     except KeyboardInterrupt:
         print("\n🛑 Tests interrupted by user")
     except Exception as e:
@@ -251,4 +306,4 @@ def main():
         sys.exit(1)
 
 if __name__ == "__main__":
-    main()
+    main_sync()

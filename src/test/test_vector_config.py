@@ -3,20 +3,12 @@
 Test script for enhanced vector search with configuration
 """
 import asyncio
-import os
+import pytest
 import sys
 from pathlib import Path
 
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent.parent))
-
-# Set environment variables
-os.environ['DB_TYPE'] = 'postgresql'
-os.environ['POSTGRES_HOST'] = 'localhost'
-os.environ['POSTGRES_PORT'] = '5432'
-os.environ['POSTGRES_USER'] = 'postgres'
-os.environ['POSTGRES_PASSWORD'] = 'postgres'
-os.environ['POSTGRES_DATABASE'] = 'kangni_ai_chatbot'
 
 from src.kangni_agents.agents.react_agent import database_query_tool
 from src.kangni_agents.services.vector_embedding_service import vector_service
@@ -25,6 +17,8 @@ import logging
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
+
+@pytest.mark.asyncio
 
 async def test_sql_parser():
     """Test SQL parser functionality"""
@@ -43,6 +37,8 @@ async def test_sql_parser():
         print(f"  Tables: {parsed['tables']}")
         print(f"  Fields: {parsed['fields']}")
         print(f"  Conditions: {parsed['conditions']}")
+
+@pytest.mark.asyncio
 
 async def test_vector_config():
     """Test loading vector search configuration"""
@@ -65,6 +61,8 @@ async def test_vector_config():
         print(f"  Max suggestions: {settings.get('max_suggestions', 'not set')}")
     else:
         print(f"Config file not found at: {config_path}")
+
+@pytest.mark.asyncio
 
 async def test_enhanced_query():
     """Test enhanced database query with vector search"""
