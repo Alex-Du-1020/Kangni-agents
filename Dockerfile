@@ -16,7 +16,6 @@ COPY src/ ./src/
 COPY prod_server.sh ./
 COPY alembic.ini ./
 COPY alembic ./alembic/
-COPY fix_database.py ./
 
 
 # Create virtual environment
