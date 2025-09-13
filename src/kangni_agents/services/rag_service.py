@@ -35,7 +35,7 @@ class RAGFlowService:
             logger.error(f"RAG service connection test failed: {e}")
             return False
     
-    async def search_rag(self, query: str, dataset_id: str, memory_context: Optional[Dict[str, Any]] = None, top_k: int = 5) -> List[RAGSearchResult]:
+    async def _search_rag(self, query: str, dataset_id: str, top_k: int = 5) -> List[RAGSearchResult]:
         """调用RAGFlow MCP服务进行文档搜索"""
         try:
             async def _do_search():
@@ -145,9 +145,9 @@ class RAGFlowService:
         
         # 并行搜索三个数据集
         tasks = [
-            ("ddl", self.search_rag(query, settings.db_ddl_dataset_id)),
-            ("query_sql", self.search_rag(query, settings.db_query_sql_dataset_id)),
-            ("description", self.search_rag(query, settings.db_description_dataset_id))
+            ("ddl", self._search_rag(query, settings.db_ddl_dataset_id)),
+            ("query_sql", self._search_rag(query, settings.db_query_sql_dataset_id)),
+            ("description", self._search_rag(query, settings.db_description_dataset_id))
         ]
         
         for name, task in tasks:
@@ -159,7 +159,7 @@ class RAGFlowService:
         
         return results
     
-    async def generate_answer_with_llm(self, query: str, search_results: List[RAGSearchResult], memory_context: Optional[Dict[str, Any]] = None) -> str:
+    async def generate_answer_with_llm(self, query: str, search_results: List[RAGSearchResult], memory_info: str = "") -> str:
         """使用LLM基于检索到的文档生成答案"""
         try:
             # 构建检索到的内容
@@ -211,7 +211,7 @@ class RAGFlowService:
 - 仅遵循记录的事实  
 - 承认知识库的局限性  
 
-{memory_context}
+{memory_info}
 用户问题: {query}"""
 
             # 检查LLM服务是否可用
@@ -253,19 +253,19 @@ class RAGFlowService:
         
         return formatted_answer
     
-    async def search_rag_with_answer(self, query: str, dataset_id: str, memory_context: Optional[Dict[str, Any]] = None, top_k: int = 5) -> Dict[str, Any]:
+    async def search_rag_with_answer(self, query: str, dataset_id: str, memory_info: str = "", top_k: int = 5) -> Dict[str, Any]:
         """搜索RAG并生成答案"""
         try:
             # 首先进行文档搜索
-            search_results = await self.search_rag(query, dataset_id, memory_context, top_k)
+            search_results = await self._search_rag(query, dataset_id, top_k)
             
             # 然后使用LLM生成答案
-            answer = await self.generate_answer_with_llm(query, search_results)
+            answer = await self.generate_answer_with_llm(query, search_results, memory_info)
 
             if "文档未涵盖" in answer or "此信息在知识库中不可用" in answer:
                 return {
-                    "answer": "未找到相关文档信息",
-                    "search_results": [],
+                    "content": "未找到相关文档信息",
+                    "rag_results": [],
                     "query": query,
                     "dataset_id": dataset_id,
                     "total_results": 0
@@ -273,7 +273,6 @@ class RAGFlowService:
             
             # 检查答案中是否引用了文档
             referenced_docs = []
-            source_links = []
             
             # 检查答案中是否包含文档引用（如"根据文档1"、"基于知识库2"等）
             import re
@@ -296,8 +295,8 @@ class RAGFlowService:
                     referenced_docs.append(search_results[doc_index])
             
             return {
-                "answer": answer,
-                "search_results": referenced_docs,
+                "content": answer,
+                "rag_results": referenced_docs,
                 "query": query,
                 "dataset_id": dataset_id,
                 "total_results": len(search_results)

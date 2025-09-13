@@ -27,7 +27,7 @@ async def test_rag_llm_integration():
     try:
         # Test 1: Basic RAG search (original functionality)
         print("\n1️⃣ Testing basic RAG search...")
-        search_results = await rag_service.search_rag(query, dataset_id, top_k=3)
+        search_results = await rag_service._search_rag(query, dataset_id, top_k=3)
         print(f"✅ Found {len(search_results)} search results")
         
         # Test 2: LLM answer generation

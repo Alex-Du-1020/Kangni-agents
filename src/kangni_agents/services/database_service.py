@@ -94,7 +94,7 @@ class DatabaseService:
     
     async def generate_sql_from_context(self, question: str, 
         context_data: Dict[str, List[RAGSearchResult]], 
-        memory_context: Optional[Dict[str, Any]] = None
+        memory_info : str = ""
         ) -> Optional[str]:
 
         """基于RAG搜索结果生成SQL查询"""
@@ -124,8 +124,6 @@ class DatabaseService:
 
 特别注意：当用户提到"订单"但没有指定具体类型时，默认查询表 kn_quality_trace_prod_order（生产订单表）
 
-{memory_context}
-
 数据库结构信息：
 {ddl_context}
 
@@ -133,7 +131,9 @@ class DatabaseService:
 {query_examples}
 
 数据库描述：
-{db_description}"""
+{db_description}
+
+"""
             
             # 4. 使用预处理器增强提示词
             enhanced_system_prompt = query_preprocessor.build_enhanced_prompt(
@@ -146,7 +146,10 @@ class DatabaseService:
             )
             
             # 5. 构建人类提示，使用预处理后的查询
-            human_prompt = f"用户问题：{preprocessed.processed_query}\n\n请生成对应的SQL查询："
+            human_prompt = f"""用户问题：{preprocessed.processed_query}\n\n
+                {memory_info}
+                请生成对应的SQL查询：
+            """
             
             # 6. 调用集中式LLM服务生成SQL
             sql_query = await llm_service.chat_with_system_prompt(
@@ -171,7 +174,7 @@ class DatabaseService:
             logger.error(f"Error generating SQL: {e}")
             return None
     
-    async def query_database(self, question: str, memory_context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+    async def query_database(self, question: str, memory_info: str = "") -> Dict[str, Any]:
         """完整的数据库查询流程"""
         try:
             
@@ -179,7 +182,7 @@ class DatabaseService:
             context_data = await rag_service.search_db_context(question)
             
             # 2. 生成SQL查询
-            sql_query = await self.generate_sql_from_context(question, context_data, memory_context)
+            sql_query = await self.generate_sql_from_context(question, context_data, memory_info)
             
             if not sql_query:
                 return {

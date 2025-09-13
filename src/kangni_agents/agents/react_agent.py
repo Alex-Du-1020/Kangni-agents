@@ -44,26 +44,26 @@ class AgentState(TypedDict):
     suggestions_used: Optional[Dict[str, Any]]  # And this for tracking suggestions
     validation_reason: Optional[str]  # And validation reason
     # Memory-related fields
-    memory_context: Optional[Dict[str, Any]]  # Memory context from memory service
+    memory_info: Optional[str]  # Memory context from memory service
     user_email: Optional[str]  # User email for memory retrieval
     session_id: Optional[str]  # Session ID for memory tracking
     query_history_id: Optional[int]  # ID of saved query history
     start_time: Optional[float]  # Start time for query
 
 @tool
-async def rag_search_tool(query: str, memory_context: Optional[Dict[str, Any]] = None, dataset_id: Optional[str] = None) -> Dict[str, Any]:
+async def rag_search_tool(query: str, memory_info: str = "", dataset_id: Optional[str] = None) -> Dict[str, Any]:
     """搜索RAG文档库获取相关信息"""
     if not dataset_id:
         dataset_id = settings.ragflow_default_dataset_id
     
-    result = await rag_service.search_rag_with_answer(query, dataset_id, memory_context)
+    result = await rag_service.search_rag_with_answer(query, dataset_id, memory_info)
     return result
 
 @tool 
-async def database_query_tool(question: str, memory_context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+async def database_query_tool(question: str, memory_info: str = "",) -> Dict[str, Any]:
     """查询数据库获取统计信息"""
     # 直接执行数据库查询
-    result = await db_service.query_database(question, memory_context)
+    result = await db_service.query_database(question, memory_info)
     
     # 返回格式化结果
     if result.get("success"):
@@ -78,7 +78,7 @@ async def database_query_tool(question: str, memory_context: Optional[Dict[str, 
         }
 
 @tool
-async def vector_database_query_tool(question: str, failed_sql: str = None, memory_context: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+async def vector_database_query_tool(question: str, failed_sql: str = None, memory_info: str = "") -> Dict[str, Any]:
     """使用向量搜索增强数据库查询，找到实际存在的值并重新生成SQL"""
     import yaml
     from pathlib import Path
@@ -182,7 +182,7 @@ async def vector_database_query_tool(question: str, failed_sql: str = None, memo
         
         # Generate new SQL with enhanced context
         logger.info("Generating new SQL with vector search suggestions")
-        enhanced_result = await db_service.query_database(enhanced_question, memory_context)
+        enhanced_result = await db_service.query_database(enhanced_question, memory_info)
         
         if enhanced_result.get("success"):
             logger.info(f"Vector-enhanced query successful, got {len(enhanced_result.get('results', []))} results")
@@ -333,7 +333,7 @@ class KangniReActAgent:
         workflow = StateGraph(AgentState)
         
         # 添加节点
-        workflow.add_node("load_memory", self.load_memory_context)  # New memory node
+        workflow.add_node("load_memory", self.load_memory_info)  # New memory node
         workflow.add_node("classify_intent", self.classify_intent)
         workflow.add_node("agent_reasoning", self.agent_reasoning)
         workflow.add_node("tool_execution", self.execute_tools)
@@ -387,7 +387,7 @@ class KangniReActAgent:
         
         return workflow.compile()
     
-    async def load_memory_context(self, state: AgentState) -> AgentState:
+    async def load_memory_info(self, state: AgentState) -> AgentState:
         """Load memory context for the user"""
         user_email = state.get("user_email")
         session_id = state.get("session_id")
@@ -396,7 +396,7 @@ class KangniReActAgent:
         logger.info(f"Loading memory context for user: {user_email}, session: {session_id}")
         
         # Get memory context from memory service
-        memory_context = {}
+        memory_info = ""
         if user_email:
             try:
                 memory_context = await memory_service.get_memory_context_for_agent(
@@ -404,20 +404,41 @@ class KangniReActAgent:
                     question=query,
                     session_id=session_id
                 )
+
+                # Build memory context string
+                memory_info = ""
+                if memory_context:
+                    # Add recent interactions
+                    recent_interactions = memory_context.get("recent_interactions", [])
+                    if recent_interactions:
+                        memory_info += "\n最近的交互历史:\n"
+                        for interaction in recent_interactions[:3]:
+                            memory_info += f"- Q: {interaction['question']}...\n"
+                            if interaction.get('answer'):
+                                memory_info += f"  A: {interaction['answer']}...\n"
+                    
+                    # # Add long-term memories
+                    # long_term = memory_context.get("long_term_memories", [])
+                    # if long_term:
+                    #     memory_info += "\n相关的长期记忆:\n"
+                    #     for mem in long_term[:3]:
+                    #         memory_info += f"- {mem['content'][:150]}... (重要性: {mem.get('importance', 'unknown')})\n"
+                    
+                    # # Add short-term memories
+                    # short_term = memory_context.get("short_term_memories", [])
+                    # if short_term:
+                    #     memory_info += "\n会话上下文:\n"
+                    #     for mem in short_term[:3]:
+                    #         memory_info += f"- {mem['content'][:1500]}...\n"
+
                 logger.info(f"Loaded memory context with {len(memory_context.get('short_term_memories', []))} short-term and {len(memory_context.get('long_term_memories', []))} long-term memories")
             except Exception as e:
                 logger.error(f"Failed to load memory context: {e}")
-                memory_context = {
-                    "short_term_memories": [],
-                    "long_term_memories": [],
-                    "recent_interactions": [],
-                    "user_profile": {"email": user_email, "session_id": session_id}
-                }
         
         return {
             **state,
             "start_time": time.time(),
-            "memory_context": memory_context
+            "memory_info": memory_info
         }
     
     async def classify_intent(self, state: AgentState) -> AgentState:
@@ -438,33 +459,7 @@ class KangniReActAgent:
         """Agent推理节点"""
         query = state["query"]
         intent = state["intent"]
-        memory_context = state.get("memory_context", {})
-        
-        # Build memory context string
-        memory_info = ""
-        if memory_context:
-            # Add recent interactions
-            recent_interactions = memory_context.get("recent_interactions", [])
-            if recent_interactions:
-                memory_info += "\n最近的交互历史:\n"
-                for interaction in recent_interactions[:3]:
-                    memory_info += f"- Q: {interaction['question'][:100]}...\n"
-                    if interaction.get('answer'):
-                        memory_info += f"  A: {interaction['answer'][:100]}...\n"
-            
-            # Add long-term memories
-            long_term = memory_context.get("long_term_memories", [])
-            if long_term:
-                memory_info += "\n相关的长期记忆:\n"
-                for mem in long_term[:3]:
-                    memory_info += f"- {mem['content'][:150]}... (重要性: {mem.get('importance', 'unknown')})\n"
-            
-            # Add short-term memories
-            short_term = memory_context.get("short_term_memories", [])
-            if short_term:
-                memory_info += "\n会话上下文:\n"
-                for mem in short_term[:3]:
-                    memory_info += f"- {mem['content'][:150]}...\n"
+        memory_info = state.get("memory_info", {})
         
         # 构建系统提示
         system_prompt = f"""你是一个智能助手，需要分析用户问题并决定使用哪些工具。你有两个工具可用：
@@ -475,6 +470,7 @@ class KangniReActAgent:
 
 当前问题意图分类为: {intent}
 分类原因: {state.get('reasoning', '')}
+
 {memory_info}
 用户问题: {query}
 
@@ -528,7 +524,6 @@ class KangniReActAgent:
             
             return {
                 **state,
-                "memory_context": memory_context,
                 "needs_tools": needs_tools,
                 "tool_to_use": tool_to_use,
                 "messages": [*state["messages"], ai_message]
@@ -543,10 +538,11 @@ class KangniReActAgent:
                 "messages": [*state["messages"], error_message]
             }
     
-    async def execute_tools(self, state: AgentState, memory_context: Optional[Dict[str, Any]] = None) -> AgentState:
+    async def execute_tools(self, state: AgentState) -> AgentState:
         """工具执行节点"""
         tool_to_use = state.get("tool_to_use")
         query = state["query"]
+        memory_info = state.get("memory_info", "")
         
         if not tool_to_use:
             logger.warning("No tool specified for execution")
@@ -558,18 +554,17 @@ class KangniReActAgent:
             messages = state["messages"]
             
             if tool_to_use == "rag_search_tool":
-                result = await rag_search_tool.ainvoke({"query": query, "memory_context": memory_context})
+                result = await rag_search_tool.ainvoke({"query": query, "memory_info": memory_info})
                 
                 # 存储RAG结果
-                state["rag_results"] = result.get("sources", [])
-                state["source_links"] = result.get("source_links", [])
+                state["rag_results"] = result.get("rag_results", [])
                 
                 # 创建工具消息 - 直接使用LLM生成的答案
                 tool_message = AIMessage(content=f"RAG搜索结果：\n{result['content']}")
                 messages.append(tool_message)
                 
             elif tool_to_use == "database_query_tool":
-                result = await database_query_tool.ainvoke({"question": query, "memory_context": memory_context})
+                result = await database_query_tool.ainvoke({"question": query, "memory_info": memory_info})
                 
                 # 存储数据库结果
                 state["db_results"] = result.get("results", [])
@@ -584,14 +579,13 @@ class KangniReActAgent:
                 logger.info("Executing both RAG and database tools")
                 
                 # 执行RAG搜索
-                rag_result = await rag_search_tool.ainvoke({"query": query, "memory_context": memory_context})
-                state["rag_results"] = rag_result.get("sources", [])
-                state["source_links"] = rag_result.get("source_links", [])
+                rag_result = await rag_search_tool.ainvoke({"query": query, "memory_info": memory_info})
+                state["rag_results"] = rag_result.get("rag_results", [])
                 rag_message = AIMessage(content=f"RAG搜索结果：\n{rag_result['content']}")
                 messages.append(rag_message)
                 
                 # 执行数据库查询
-                db_result = await database_query_tool.ainvoke({"question": query})
+                db_result = await database_query_tool.ainvoke({"question": query, "memory_info": memory_info})
                 state["db_results"] = db_result.get("results", [])
                 state["sql_query"] = db_result.get("sql_query")
                 db_message = AIMessage(content=f"数据库查询结果：\n{db_result['content']}")
@@ -631,12 +625,12 @@ class KangniReActAgent:
             
             # 获取RAG结果（如果使用了both工具）
             rag_results = state.get("rag_results", [])
-            memory_context = state.get("memory_context", {})
+            memory_info = state.get("memory_info", {})
             
             # 构建让LLM判断的提示
             validation_prompt = f"""请分析以下工具执行结果，判断查询是否成功以及是否需要使用向量搜索增强。
 
-{memory_context}
+{memory_info}
 用户问题: {query}
 
 生成的SQL: {sql_query if sql_query else "无"}
@@ -739,11 +733,12 @@ SQL生成成功: [是/否]
                 "validation_reason": "RAG搜索，无需数据库验证"
             }
 
-    async def vector_search_enhancement(self, state: AgentState, memory_context: Optional[Dict[str, Any]] = None) -> AgentState:
+    async def vector_search_enhancement(self, state: AgentState) -> AgentState:
         """使用向量搜索增强数据库查询"""
         query = state["query"]
         failed_sql = state.get("sql_query")
-        
+        memory_info = state.get("memory_info", "")
+
         logger.info(f"Starting vector search enhancement for query: {query}")
         
         try:
@@ -751,7 +746,7 @@ SQL生成成功: [是/否]
             result = await vector_database_query_tool.ainvoke({
                 "question": query,
                 "failed_sql": failed_sql,
-                "memory_context": memory_context
+                "memory_info": memory_info
             })
             
             # 检查向量搜索是否成功
@@ -804,21 +799,22 @@ SQL生成成功: [是/否]
                 "messages": [*state["messages"], error_message]
             }
     
-    async def fallback_search(self, state: AgentState, memory_context: Optional[Dict[str, Any]] = None) -> AgentState:
+    async def fallback_search(self, state: AgentState) -> AgentState:
         """当数据库查询无效结果时，执行RAG搜索作为fallback"""
         query = state["query"]
+        memory_info = state.get("memory_info", "")
         
         logger.info(f"Executing RAG fallback search for query: {query}")
         
         try:
             # 执行RAG搜索
-            result = await rag_search_tool.ainvoke({"query": query, "memory_context": memory_context})
+            result = await rag_search_tool.ainvoke({"query": query, "memory_info": memory_info})
             
             # 存储RAG结果
-            rag_results = result.get("sources", [])
+            rag_results = result.get("rag_results", [])
             source_links = result.get("source_links", [])
             
-            # 检查RAG是否有有效结果（检查内容而不是sources）
+            # 检查RAG是否有有效结果
             has_rag_results = bool(result.get("content") and result["content"].strip())
             
             if has_rag_results:
@@ -976,10 +972,6 @@ SQL生成成功: [是/否]
         # 构建格式化回答
         answer_parts = []
         
-        # 添加SQL查询信息（如果有）
-        if sql_query:
-            answer_parts.append(f"执行的SQL查询：\n{sql_query}\n")
-        
         # 添加结果统计
         result_count = len(db_results)
         answer_parts.append(f"查询结果：共找到 {result_count} 条记录\n")
@@ -1060,20 +1052,6 @@ SQL生成成功: [是/否]
             sql_query = state.get("sql_query")
             query_type = state.get("intent")
             rag_results = state.get("rag_results", [])
-            source_links = state.get("source_links", [])
-            
-            # Prepare sources from RAG results
-            sources = None
-            if rag_results:
-                sources = []
-                for result in rag_results:
-                    if hasattr(result, 'metadata') and result.metadata:
-                        source_info = {
-                            "content": getattr(result, 'content', ''),
-                            "score": getattr(result, 'score', 0.0),
-                            "metadata": result.metadata
-                        }
-                        sources.append(source_info)
             
             # Determine success based on whether we have an answer
             success = bool(answer and answer.strip())
@@ -1096,7 +1074,7 @@ SQL生成成功: [是/否]
                 question=query,
                 answer=answer,
                 sql_query=sql_query,
-                sources=sources,
+                sources=rag_results,
                 query_type=query_type,
                 success=success,
                 processing_time_ms=processing_time_ms,
@@ -1144,7 +1122,7 @@ SQL生成成功: [是/否]
                 "suggestions_used": None,  # Added
                 "validation_reason": None,  # Added
                 # Memory-related fields
-                "memory_context": None,
+                "memory_info": None,
                 "user_email": user_email,
                 "session_id": session_id,
                 "query_history_id": None

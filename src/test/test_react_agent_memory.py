@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 # Test configuration
 TEST_EMAIL = "agent_memory_test@example.com"
-TEST_SESSION = "agent-memory-test-session-001"
+TEST_SESSION = "agent-memory-test-session-005"
 TEST_EMAIL_2 = "agent_memory_test_2@example.com"
 TEST_SESSION_2 = "agent-memory-test-session-002"
 
@@ -254,6 +254,7 @@ class ReactAgentMemoryTests:
             
             # Test query that should benefit from memory context
             test_question = "#合肥S1号线项目乘客室门#这个项目一共有多少个去重后生产订单？"
+            # test_question = "这个项目主要的生产线有哪几个？"
             
             response = await self.agent.query(
                 question=test_question,
@@ -262,10 +263,10 @@ class ReactAgentMemoryTests:
             )
             
             print(f"✅ Agent response received:")
-            print(f"   - Answer length: {len(response.answer) if response.answer else 0} characters")
+            print(f"   - Answer: {response}")
             print(f"   - Query type: {response.query_type}")
             print(f"   - Confidence: {response.confidence}")
-            print(f"   - Has SQL: {bool(response.sql_query)}")
+            print(f"   - Has SQL: {response.sql_query}")
             print(f"   - Has sources: {len(response.sources) if response.sources else 0}")
             
             # Check if response contains memory-related information

@@ -63,7 +63,7 @@ async def test_rag_search():
     
     try:
         # 使用默认数据集进行搜索
-        results = await rag_service.search_rag(query, settings.ragflow_default_dataset_id, top_k=5)
+        results = await rag_service._search_rag(query, settings.ragflow_default_dataset_id, top_k=5)
         assert len(results) == 5
         
         # 确保results不为None
