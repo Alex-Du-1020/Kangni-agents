@@ -72,10 +72,13 @@ class RAGFlowService:
                                     chunks = parsed_data['chunks']
                                     for i, chunk in enumerate(chunks):
                                         if isinstance(chunk, dict) and i < 5:
-                                            content.append(chunk)
+                                            if len(chunk) < 5000:
+                                                content.append(chunk)
+                                            else:
+                                                content.append(chunk[:5000])
                                 elif isinstance(parsed_data, list):
                                     # 直接是数组格式
-                                    content.extend(parsed_data)
+                                    content.extend(parsed_data if len(parsed_data) < 5000 else parsed_data[:5000])
                                 else:
                                     # 单个对象
                                     content.append(parsed_data)
@@ -175,6 +178,14 @@ class RAGFlowService:
             prompt = f"""角色
 您是文档质量检查代理，一位专门的知识库助手，负责严格基于关联的文档存储库提供准确答案。
 
+第一步需要理解用户的问题，根据下面的步骤理解用户的问题。
+1. 先检查用户问题是否需要历史记忆来回答  
+2. 如果需要，找到与问题最相关的记忆并引用  
+3. 再根据当前输入给出最终答案
+
+用户对话历史：{memory_info}
+用户问题: {query}
+
 知识库搜索答案： {retrieval_content}
 
 核心原则
@@ -184,35 +195,32 @@ class RAGFlowService:
 准确性优于完整性：宁愿提供不完整但准确的答案，也不提供完整但可能不准确的信息。
 
 回答指南
-当信息可用时
+1. 当信息可用时
 根据检索到的内容提供直接答案
 在有帮助时引用相关部分
 如果可用，标注来源文档/部分
 使用诸如"根据文档1..."或"基于知识库2..."等短语告诉我们你的来源。
-
 如果结果来自多个文档，就列出来所有结果的来源。
 例如：
 门板油漆损伤的原因是：
 根据文档1，包装箱支撑防护不足
 根据文档2，运输过程中存在磕碰
 
-当信息不可用时
+2. 当信息不可用时
 明确声明："我在当前知识库中找不到此信息。"
 不要尝试用通用知识填补空白
-建议可能涵盖该问题的其他问题
-使用诸如"文档未涵盖..."或"此信息在知识库中不可用"等短语
+不要任何建议
+使用诸如"文档未涵盖"或"此信息在知识库中不可用"等短语
 
 回答格式
-[严格基于知识库内容的回答]  
+[严格基于知识库内容的回答]
 
 **始终遵循以下要求：**  
 - 对每个问题使用检索工具  
 - 对信息的可用性保持透明  
 - 仅遵循记录的事实  
 - 承认知识库的局限性  
-
-{memory_info}
-用户问题: {query}"""
+"""
 
             # 检查LLM服务是否可用
             if not llm_service.llm_available:

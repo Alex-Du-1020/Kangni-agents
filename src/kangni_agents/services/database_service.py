@@ -113,7 +113,16 @@ class DatabaseService:
             db_description = "\n".join([r.content for r in context_data.get("description", [])])
             
             # 3. 构建基础系统提示
-            base_system_prompt = f"""你是一个专业的SQL生成助手。基于提供的数据库结构、查询示例和描述信息，为用户问题生成准确的SQL查询。
+            base_system_prompt = f"""你是一个专业的SQL生成助手。
+
+第一步需要理解用户的问题，根据下面的步骤理解用户的问题。
+1. 先检查用户问题是否需要历史记忆来回答  
+2. 如果需要，找到与问题最相关的记忆并引用  
+3. 再根据当前输入给出最终答案
+
+用户对话历史：{memory_info}
+            
+基于提供的数据库结构、查询示例和描述信息，为用户问题生成准确的SQL查询。
 
 必须遵守这些要求：
 1. 只返回SQL查询语句，不要添加额外的解释
@@ -138,6 +147,7 @@ class DatabaseService:
             # 4. 使用预处理器增强提示词
             enhanced_system_prompt = query_preprocessor.build_enhanced_prompt(
                 base_system_prompt.format(
+                    memory_info=memory_info,
                     ddl_context=ddl_context,
                     query_examples=query_examples,
                     db_description=db_description
@@ -147,7 +157,6 @@ class DatabaseService:
             
             # 5. 构建人类提示，使用预处理后的查询
             human_prompt = f"""用户问题：{preprocessed.processed_query}\n\n
-                {memory_info}
                 请生成对应的SQL查询：
             """
             

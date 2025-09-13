@@ -656,7 +656,7 @@ class CentralizedLLMService:
     
     def switch_provider(self, provider: str) -> bool:
         """动态切换LLM提供商"""
-        valid_providers = ["deepseek", "openai", "alibaba", "ollama"]
+        valid_providers = ["deepseek", "openai", "alibaba"]
         if provider.lower() not in valid_providers:
             logger.error(f"Invalid provider: {provider}. Valid options: {valid_providers}")
             return False

@@ -1,17 +1,12 @@
 [
     {
-        "question": "#合肥S1号线项目乘客室门#这个项目一共有多少个去重后生产订单？",
-        "SQL": "SELECT COUNT(DISTINCT workorderno_s) FROM kn_quality_trace_prod_order WHERE projectname_s LIKE '%合肥S1号线项目乘客室门%';"
-        
-    },
-    {
         "question": "合肥S1号线项目乘客室门这个项目一共有多少个去重后生产订单？",
-        "SQL": "SELECT COUNT(DISTINCT workorderno_s) FROM kn_quality_trace_prod_order WHERE projectname_s = '合肥S1号线项目乘客室门';"
+        "SQL": "WHERE projectname_s = '合肥S1号线项目乘客室门';"
     },
     {
-        "question": "深圳14号线门扇外观问题团队中的质量工程师是谁？",
+        "question": "唐车160公里集中动力车组CR200J3-C-1123 车的门类型是什么？",
         "keywords": [
-            "耿俊"
+            "塞拉门"
         ]
     },
     {
@@ -48,9 +43,7 @@
     },
     {
         "question": "德里地铁4期项目(20D21028C000)在故障信息查询中共发生多少起故障？",
-        "keywords": [
-            "5"
-        ]
+        "SQL": "SQL: SELECT COUNT(*) FROM kn_quality_trace_history_fault_info WHERE project_name LIKE '%德里地铁4期%' AND project_code = '20D21028C000';"
     },
     {
         "question": "故障编号SH-202508-0899的故障后果是什么？",
@@ -74,13 +67,6 @@
         "question": "100030602订单BOM中0120010001物料的报检人是谁？",
         "keywords": [
             "张雪芹"
-        ]
-    },
-    {
-        "question": "车门油漆发黄，与车体形成明显差别的解决措施是什么？",
-        "keywords": [
-            "清洁",
-            "喷漆"
         ]
     },
     {

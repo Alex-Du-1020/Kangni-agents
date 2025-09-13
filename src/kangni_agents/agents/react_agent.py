@@ -47,8 +47,9 @@ class AgentState(TypedDict):
     memory_info: Optional[str]  # Memory context from memory service
     user_email: Optional[str]  # User email for memory retrieval
     session_id: Optional[str]  # Session ID for memory tracking
-    query_history_id: Optional[int]  # ID of saved query history
     start_time: Optional[float]  # Start time for query
+    # Data formatting fields
+    formatted_db_results: Optional[str]  # LLM-formatted database results
 
 @tool
 async def rag_search_tool(query: str, memory_info: str = "", dataset_id: Optional[str] = None) -> Dict[str, Any]:
@@ -409,13 +410,13 @@ class KangniReActAgent:
                 memory_info = ""
                 if memory_context:
                     # Add recent interactions
-                    recent_interactions = memory_context.get("recent_interactions", [])
-                    if recent_interactions:
-                        memory_info += "\n最近的交互历史:\n"
-                        for interaction in recent_interactions[:3]:
-                            memory_info += f"- Q: {interaction['question']}...\n"
-                            if interaction.get('answer'):
-                                memory_info += f"  A: {interaction['answer']}...\n"
+                    # recent_interactions = memory_context.get("recent_interactions", [])
+                    # if recent_interactions:
+                    #     memory_info += "\n最近的交互历史:\n"
+                    #     for interaction in recent_interactions[:3]:
+                    #         memory_info += f"- Q: {interaction['question']}...\n"
+                    #         if interaction.get('answer'):
+                    #             memory_info += f"  A: {interaction['answer']}...\n"
                     
                     # # Add long-term memories
                     # long_term = memory_context.get("long_term_memories", [])
@@ -424,12 +425,12 @@ class KangniReActAgent:
                     #     for mem in long_term[:3]:
                     #         memory_info += f"- {mem['content'][:150]}... (重要性: {mem.get('importance', 'unknown')})\n"
                     
-                    # # Add short-term memories
-                    # short_term = memory_context.get("short_term_memories", [])
-                    # if short_term:
-                    #     memory_info += "\n会话上下文:\n"
-                    #     for mem in short_term[:3]:
-                    #         memory_info += f"- {mem['content'][:1500]}...\n"
+                    # Add short-term memories
+                    short_term = memory_context.get("short_term_memories", [])
+                    if short_term:
+                        memory_info += "\n会话上下文:\n"
+                        for mem in short_term[:3]:
+                            memory_info += f"- {mem['content']}...\n"
 
                 logger.info(f"Loaded memory context with {len(memory_context.get('short_term_memories', []))} short-term and {len(memory_context.get('long_term_memories', []))} long-term memories")
             except Exception as e:
@@ -584,14 +585,17 @@ class KangniReActAgent:
                 rag_message = AIMessage(content=f"RAG搜索结果：\n{rag_result['content']}")
                 messages.append(rag_message)
                 
-                # 执行数据库查询
-                db_result = await database_query_tool.ainvoke({"question": query, "memory_info": memory_info})
-                state["db_results"] = db_result.get("results", [])
-                state["sql_query"] = db_result.get("sql_query")
-                db_message = AIMessage(content=f"数据库查询结果：\n{db_result['content']}")
-                messages.append(db_message)
-                
-                logger.info("Both tools executed successfully")
+                if "未找到相关文档信息" in rag_result['content']:
+                    # 执行数据库查询
+                    db_result = await database_query_tool.ainvoke({"question": query, "memory_info": memory_info})
+                    state["db_results"] = db_result.get("results", [])
+                    state["sql_query"] = db_result.get("sql_query")
+                    db_message = AIMessage(content=f"数据库查询结果：\n{db_result['content']}")
+                    messages.append(db_message)
+                    
+                    logger.info("Both tools executed successfully")
+                else:
+                    logger.info("RAG search successfully, skipping database query")
                 
             else:
                 tool_message = AIMessage(content=f"未知工具: {tool_to_use}")
@@ -627,10 +631,15 @@ class KangniReActAgent:
             rag_results = state.get("rag_results", [])
             memory_info = state.get("memory_info", {})
             
-            # 构建让LLM判断的提示
-            validation_prompt = f"""请分析以下工具执行结果，判断查询是否成功以及是否需要使用向量搜索增强。
+            # 构建让LLM判断和格式化的提示
+            validation_prompt = f"""请分析以下工具执行结果，判断查询是否成功。如果查询结果成功，直接格式化结果。如果失败，判断是否需要使用向量搜索增强。
 
-{memory_info}
+第一步需要理解用户的问题，根据下面的步骤理解用户的问题。
+1. 先检查用户问题是否需要历史记忆来回答  
+2. 如果需要，找到与问题最相关的记忆并引用  
+3. 再根据当前输入给出最终答案
+
+用户对话历史：{memory_info}
 用户问题: {query}
 
 生成的SQL: {sql_query if sql_query else "无"}
@@ -639,11 +648,20 @@ class KangniReActAgent:
 
 RAG搜索结果: {"找到相关文档" if rag_results else "无RAG结果"}
 
-请分析并回答以下问题：
-1. SQL查询是否成功生成？（是/否）
-2. 数据库查询是否返回了有效数据？（是/否）
-3. 如果没有返回数据，是否应该使用向量搜索来找到正确的数据库值？（是/否）
-4. 如果向量搜索也不适用，是否应该使用RAG文档搜索作为备用方案？（是/否）
+请按以下步骤处理：
+
+1. 分析查询结果：
+   - SQL查询是否成功生成？（是/否）
+   - 数据库查询是否返回了有效数据？（是/否）
+   - 如果没有返回数据，是否应该使用向量搜索来找到正确的数据库值？（是/否）
+   - 如果向量搜索也不适用，是否应该使用RAG文档搜索作为备用方案？（是/否）
+
+2. 如果数据库查询返回了有效数据，请直接格式化结果：
+   - 用自然语言回答用户的问题
+   - 如果查询结果包含COUNT(*)或数量统计，请明确说出具体的数字
+   - 对于数据列表，用清晰的方式展示关键信息
+   - 如果数据量很大，只显示前几条记录并说明总数
+   - 保持回答简洁明了，重点突出
 
 判断标准：
 - 如果SQL生成成功但返回0条记录，很可能是查询条件中的值不准确（如项目名称拼写错误），应该使用向量搜索
@@ -656,7 +674,8 @@ SQL生成成功: [是/否]
 有效数据: [是/否]  
 需要向量搜索: [是/否]
 需要RAG备用: [是/否]
-原因: [简要说明判断理由]"""
+原因: [简要说明判断理由]
+格式化结果: [如果有效数据，请直接给出格式化的回答，否则写"无"]"""
 
             # 转换消息格式为LLMMessage
             llm_messages = [
@@ -680,8 +699,31 @@ SQL生成成功: [是/否]
                     reason_match = response_text.find("原因：")
                 reason = response_text[reason_match:].split('\n')[0] if reason_match != -1 else "未提供原因"
                 
+                # 提取格式化结果
+                formatted_db_results = None
+                format_match = response_text.find("格式化结果:")
+                if format_match == -1:
+                    format_match = response_text.find("格式化结果：")
+                
+                if format_match != -1:
+                    # 提取格式化结果部分（包括多行）
+                    format_text = response_text[format_match:]
+                    if "格式化结果:" in format_text:
+                        formatted_db_results = format_text.split("格式化结果:")[1].strip()
+                    elif "格式化结果：" in format_text:
+                        formatted_db_results = format_text.split("格式化结果：")[1].strip()
+                    
+                    # 如果格式化结果是"无"或空，则设为None
+                    if formatted_db_results in ["无", "", "无数据", "无结果"]:
+                        formatted_db_results = None
+                
+                # 如果没有从LLM获取到格式化结果，但有有效数据，使用简单格式化
+                if has_valid_data and db_results and not formatted_db_results:
+                    formatted_db_results = self._format_database_response(db_results, sql_query)
+                
                 logger.info(f"LLM validation result: sql_valid={has_valid_sql}, data_valid={has_valid_data}, needs_vector={needs_vector}, needs_rag={needs_rag}")
                 logger.info(f"Validation reason: {reason}")
+                logger.info(f"Formatted results: {'Yes' if formatted_db_results else 'No'}")
                 
                 return {
                     **state,
@@ -689,7 +731,8 @@ SQL生成成功: [是/否]
                     "needs_vector_search": needs_vector,  # Changed from needs_vector_search to match what we check
                     "needs_fallback": needs_rag,
                     "fallback_executed": False,
-                    "validation_reason": reason
+                    "validation_reason": reason,
+                    "formatted_db_results": formatted_db_results
                 }
                 
             except Exception as e:
@@ -712,6 +755,12 @@ SQL生成成功: [是/否]
                 needs_vector_search = has_sql and not has_results and state.get("intent") == QueryType.DATABASE
                 needs_fallback = not has_sql or (not has_results and state.get("intent") != QueryType.DATABASE)
                 
+                # If database results are valid, format them using simple formatting
+                formatted_db_results = None
+                if has_sql and has_results and db_results:
+                    formatted_db_results = self._format_database_response(db_results, sql_query)
+                    logger.info("Database results formatted using simple formatting (fallback)")
+                
                 logger.info(f"Fallback validation: has_sql={has_sql}, has_results={has_results}, needs_vector={needs_vector_search}, needs_fallback={needs_fallback}")
                 
                 return {
@@ -720,7 +769,8 @@ SQL生成成功: [是/否]
                     "needs_vector_search": needs_vector_search,
                     "needs_fallback": needs_fallback,
                     "fallback_executed": False,
-                    "validation_reason": "使用备用验证逻辑"
+                    "validation_reason": "使用备用验证逻辑",
+                    "formatted_db_results": formatted_db_results
                 }
         else:
             # RAG搜索或其他情况，直接认为有效
@@ -887,11 +937,17 @@ SQL生成成功: [是/否]
                     "messages": [*state["messages"], ai_message]
                 }
         
-        # 如果只有数据库结果，格式化数据
+        # 如果只有数据库结果，使用预格式化的结果或格式化数据
         elif tool_to_use == "database_query_tool" and db_results:
-            # 格式化数据库结果
-            formatted_answer = self._format_database_response(db_results, sql_query)
-            logger.info("Returning formatted database response")
+            # 优先使用LLM预格式化的结果
+            if state.get("formatted_db_results"):
+                formatted_answer = state["formatted_db_results"]
+                logger.info("Returning LLM-formatted database response")
+            else:
+                # 回退到简单格式化
+                formatted_answer = self._format_database_response(db_results, sql_query)
+                logger.info("Returning simple formatted database response")
+            
             ai_message = AIMessage(content=formatted_answer)
             return {
                 **state,
@@ -920,49 +976,12 @@ SQL生成成功: [是/否]
                     "final_answer": rag_answer,
                     "messages": [*state["messages"], ai_message]
                 }
-        
-        # 其他情况，使用LLM生成回答
-        logger.info("Using LLM to generate final response")
-        
-        # 构建简化的提示
-        final_prompt = """请基于以上工具执行结果生成最终回答。回答要求：
-1. 准确、完整地回答用户问题
-2. 如果查询结果包含COUNT(*)或数量统计，请明确说出具体的数字
-3. 保持回答的逻辑性和可读性
-
-请直接给出最终答案，不要重复工具调用过程。
-"""
-        
-        # 转换消息格式为LLMMessage
-        llm_messages = []
-        for msg in state["messages"]:
-            if hasattr(msg, 'content'):
-                role = "user" if isinstance(msg, HumanMessage) else "assistant"
-                llm_messages.append(LLMMessage(role=role, content=msg.content))
-        
-        # 添加最终提示
-        llm_messages.append(LLMMessage(role="user", content=final_prompt))
-        
-        try:
-            response = await llm_service.chat(llm_messages)
-            
-            # 创建AIMessage响应
-            ai_message = AIMessage(content=response.content)
-            
-            return {
-                **state,
-                "final_answer": response.content,
-                "messages": [*state["messages"], ai_message]
-            }
-            
-        except Exception as e:
-            logger.error(f"LLM final response error: {e}")
-            error_message = AIMessage(content=f"抱歉，生成最终回答时发生错误: {str(e)}")
-            return {
-                **state,
-                "final_answer": f"抱歉，生成最终回答时发生错误: {str(e)}",
-                "messages": [*state["messages"], error_message]
-            }
+            else:
+                return {
+                    **state,
+                    "final_answer": "抱歉，没有找到相关信息",
+                    "messages": [*state["messages"], AIMessage(content="抱歉，没有找到相关信息")]
+                }
     
     def _format_database_response(self, db_results: List[Dict], sql_query: str = None) -> str:
         """格式化数据库查询结果"""
@@ -1066,7 +1085,19 @@ SQL生成成功: [是/否]
             
             # Calculate processing time (simplified - could be enhanced with actual timing)
             processing_time_ms = (time.time() - state.get("start_time")) * 1000  # Default value, could be calculated from actual start/end times
-            
+
+                            # 处理RAG结果，提取文档信息并去重
+            unique_documents = []
+            for result in rag_results:
+                if hasattr(result, 'metadata') and result.metadata:
+                    doc_id = result.metadata.get('document_id')
+                    if doc_id and doc_id not in unique_documents:
+                        unique_documents[doc_id] = {
+                            "document_id": doc_id,
+                            "document_name": result.metadata.get('document_name', ''),
+                            "dataset_name": result.metadata.get('dataset_name', '')
+                        }
+
             # Save to history
             history = await history_service.save_query_history(
                 session_id=session_id,
@@ -1074,7 +1105,7 @@ SQL生成成功: [是/否]
                 question=query,
                 answer=answer,
                 sql_query=sql_query,
-                sources=rag_results,
+                sources=unique_documents,
                 query_type=query_type,
                 success=success,
                 processing_time_ms=processing_time_ms,
@@ -1125,7 +1156,8 @@ SQL生成成功: [是/否]
                 "memory_info": None,
                 "user_email": user_email,
                 "session_id": session_id,
-                "query_history_id": None
+                # Data formatting fields
+                "formatted_db_results": None
             }
             
             # 运行工作流

@@ -423,7 +423,7 @@ class MemoryService:
                 "recent_interactions": [
                     {
                         "question": h["question"],
-                        "answer": h["answer"][:200] if h["answer"] else None,
+                        "answer": h["answer"] if h["answer"] else None,
                         "success": h["success"],
                         "created_at": h["created_at"]
                     } for h in recent_history[:3]

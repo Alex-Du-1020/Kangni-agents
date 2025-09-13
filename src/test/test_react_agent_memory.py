@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 # Test configuration
 TEST_EMAIL = "agent_memory_test@example.com"
-TEST_SESSION = "agent-memory-test-session-005"
+TEST_SESSION = "agent-memory-test-session-888"
 TEST_EMAIL_2 = "agent_memory_test_2@example.com"
 TEST_SESSION_2 = "agent-memory-test-session-002"
 
@@ -253,8 +253,11 @@ class ReactAgentMemoryTests:
                 return False
             
             # Test query that should benefit from memory context
-            test_question = "#合肥S1号线项目乘客室门#这个项目一共有多少个去重后生产订单？"
+            # test_question = "#合肥S1号线项目乘客室门#这个项目一共有多少个去重后生产订单？"
             # test_question = "这个项目主要的生产线有哪几个？"
+            # test_question = "内解锁接地线线束短，无法安装到紧固螺钉位置是那个项目发生的？"
+            # test_question = "德里地铁4期项目(20D21028C000)在故障信息查询中共发生多少起故障？"
+            test_question = "西安机场线项目开关开裂的根因是?"
             
             response = await self.agent.query(
                 question=test_question,
