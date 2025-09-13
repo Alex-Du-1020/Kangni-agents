@@ -205,6 +205,9 @@ class MemoryService:
             entities = self._extract_entities(question + " " + answer)
             facts = self._extract_facts(answer)
             
+            # Ensure entities are properly encoded for database storage
+            entities = self._ensure_proper_encoding(entities)
+            
             # Determine importance based on feedback
             importance = MemoryImportance.MEDIUM
             if feedback_type == "like":
@@ -492,8 +495,25 @@ class MemoryService:
         capitalized = re.findall(r'\b[A-Z][a-z]+(?:\s+[A-Z][a-z]+)*\b', text)
         entities.extend(capitalized)
         
+        # Clean and normalize entities to ensure proper encoding
+        cleaned_entities = []
+        for entity in entities:
+            if entity and isinstance(entity, str):
+                # Strip whitespace and ensure it's a proper string
+                cleaned_entity = entity.strip()
+                if cleaned_entity and len(cleaned_entity) > 0:
+                    # Ensure proper Unicode handling
+                    try:
+                        # Test that the entity can be properly encoded/decoded
+                        cleaned_entity.encode('utf-8').decode('utf-8')
+                        cleaned_entities.append(cleaned_entity)
+                    except (UnicodeEncodeError, UnicodeDecodeError):
+                        # Skip entities that can't be properly encoded
+                        logger.warning(f"Skipping entity with encoding issues: {repr(entity)}")
+                        continue
+        
         # Remove duplicates and return
-        return list(set(entities))[:10]
+        return list(set(cleaned_entities))[:10]
     
     def _extract_facts(self, text: str) -> List[str]:
         """Extract factual statements from Chinese text"""
@@ -530,6 +550,33 @@ class MemoryService:
                     facts.append(sentence)
         
         return facts[:5]  # Return top 5 facts
+    
+    def _ensure_proper_encoding(self, entities: List[str]) -> List[str]:
+        """Ensure entities are properly encoded for database storage"""
+        if not entities:
+            return []
+        
+        properly_encoded = []
+        for entity in entities:
+            if not entity or not isinstance(entity, str):
+                continue
+                
+            try:
+                # Ensure the entity is properly encoded as UTF-8
+                # This will raise an exception if there are encoding issues
+                entity_bytes = entity.encode('utf-8')
+                entity_decoded = entity_bytes.decode('utf-8')
+                
+                # Only add if the round-trip encoding/decoding works
+                if entity_decoded == entity:
+                    properly_encoded.append(entity)
+                else:
+                    logger.warning(f"Entity encoding mismatch: {repr(entity)} -> {repr(entity_decoded)}")
+            except (UnicodeEncodeError, UnicodeDecodeError) as e:
+                logger.warning(f"Entity encoding error: {repr(entity)} - {e}")
+                continue
+        
+        return properly_encoded
 
 
 # Global memory service instance

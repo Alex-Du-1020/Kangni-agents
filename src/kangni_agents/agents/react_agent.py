@@ -1076,8 +1076,8 @@ SQL生成成功: [是/否]
             success = bool(answer and answer.strip())
             
             # Get LLM info from agent if available
-            llm_provider = None
-            model_name = None
+            llm_provider = ""
+            model_name = ""
             if hasattr(self, 'llm_provider') and self.llm_provider:
                 llm_provider = str(self.llm_provider.value if hasattr(self.llm_provider, 'value') else self.llm_provider)
             if hasattr(self, 'model_name') and self.model_name:
@@ -1086,8 +1086,8 @@ SQL生成成功: [是/否]
             # Calculate processing time (simplified - could be enhanced with actual timing)
             processing_time_ms = (time.time() - state.get("start_time")) * 1000  # Default value, could be calculated from actual start/end times
 
-                            # 处理RAG结果，提取文档信息并去重
-            unique_documents = []
+            # 处理RAG结果，提取文档信息并去重
+            unique_documents = {}
             for result in rag_results:
                 if hasattr(result, 'metadata') and result.metadata:
                     doc_id = result.metadata.get('document_id')
@@ -1097,6 +1097,9 @@ SQL生成成功: [是/否]
                             "document_name": result.metadata.get('document_name', ''),
                             "dataset_name": result.metadata.get('dataset_name', '')
                         }
+            
+            # 转换为列表格式
+            sources = list(unique_documents.values())
 
             # Save to history
             history = await history_service.save_query_history(
@@ -1105,7 +1108,7 @@ SQL生成成功: [是/否]
                 question=query,
                 answer=answer,
                 sql_query=sql_query,
-                sources=unique_documents,
+                sources=sources,
                 query_type=query_type,
                 success=success,
                 processing_time_ms=processing_time_ms,

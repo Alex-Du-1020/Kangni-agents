@@ -9,4 +9,9 @@ vector_search_fields:
     description: "项目名称"
     keywords: ["项目", "工程", "project", "项目名"]
     priority: 1
+  - table: "kn_quality_trace_history_fault_info"
+    field: "projectname"
+    description: "项目名称"
+    keywords: ["项目", "工程", "project", "项目名"]
+    priority: 1
     
