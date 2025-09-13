@@ -51,7 +51,7 @@ def upgrade() -> None:
         sa.Column('field_value', sa.Text(), nullable=False),
         sa.Column('embedding_id', sa.Integer(), nullable=False),
         sa.Column('created_at', sa.DateTime(), 
-                  server_default=sa.text('now()' if db_type == 'postgresql' else 'CURRENT_TIMESTAMP'), 
+                  server_default=sa.text('now()'), 
                   nullable=True),
         sa.PrimaryKeyConstraint('id')
     )
