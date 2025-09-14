@@ -1088,15 +1088,16 @@ SQL生成成功: [是/否]
 
             # 处理RAG结果，提取文档信息并去重
             unique_documents = {}
-            for result in rag_results:
-                if hasattr(result, 'metadata') and result.metadata:
-                    doc_id = result.metadata.get('document_id')
-                    if doc_id and doc_id not in unique_documents:
-                        unique_documents[doc_id] = {
-                            "document_id": doc_id,
-                            "document_name": result.metadata.get('document_name', ''),
-                            "dataset_name": result.metadata.get('dataset_name', '')
-                        }
+            if rag_results is not None:
+                for result in rag_results:
+                    if hasattr(result, 'metadata') and result.metadata:
+                        doc_id = result.metadata.get('document_id')
+                        if doc_id and doc_id not in unique_documents:
+                            unique_documents[doc_id] = {
+                                "document_id": doc_id,
+                                "document_name": result.metadata.get('document_name', ''),
+                                "dataset_name": result.metadata.get('dataset_name', '')
+                            }
             
             # 转换为列表格式
             sources = list(unique_documents.values())

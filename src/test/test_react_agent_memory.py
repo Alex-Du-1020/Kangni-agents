@@ -258,7 +258,7 @@ class ReactAgentMemoryTests:
             # test_question = "内解锁接地线线束短，无法安装到紧固螺钉位置是那个项目发生的？"
             # test_question = "德里地铁4期项目(20D21028C000)在故障信息查询中共发生多少起故障？"
             # test_question = "西安机场线项目开关开裂的根因是?"
-            test_question = "1广州地铁13号线二期项目司机室门一共有多少个订单？"
+            test_question = "合肥S1号线项目乘客室门这个项目一共有多少个生产订单？"
             
             response = await self.agent.query(
                 question=test_question,
