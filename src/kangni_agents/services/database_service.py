@@ -108,9 +108,9 @@ class DatabaseService:
             logger.info(f"Query preprocessing completed: {len(preprocessed.entities)} entities found")
             
             # 2. 构建上下文信息
-            ddl_context = "\n".join([r.content for r in context_data.get("ddl", [])])
-            query_examples = "\n".join([r.content for r in context_data.get("query_sql", [])])
-            db_description = "\n".join([r.content for r in context_data.get("description", [])])
+            ddl_context = "\n\n\n".join([r.content for r in context_data.get("ddl", [])])
+            query_examples = "\n\n\n".join([r.content for r in context_data.get("query_sql", [])])
+            db_description = "\n\n\n".join([r.content for r in context_data.get("description", [])])
             
             # 3. 构建基础系统提示
             base_system_prompt = f"""你是一个专业的SQL生成助手。
@@ -124,16 +124,24 @@ class DatabaseService:
             
 基于提供的数据库结构、查询示例和描述信息，为用户问题生成准确的SQL查询。
 
+【关键要求 - 字段一致性验证】：
+1. 在生成SQL之前，必须先选择一个完整的DDL语句作为参考
+2. 确保SQL中使用的所有字段名都来自同一个DDL语句中的表结构
+3. 如果多个DDL包含相似表名，必须明确选择其中一个DDL作为字段来源
+4. 禁止混合使用不同DDL中的字段，即使字段名相同
+5. 在生成SQL前，先列出选择的DDL和对应的表结构，确保字段一致性
+
 必须遵守这些要求：
 1. 只返回SQL查询语句，不要添加额外的解释
 2. 确保SQL语法正确
-3. 使用提供的表结构，字段名一定来自于同一个DDL。你可以先验证字段名是否都来自于同一个DDL。如果不是，麻烦重新生成一个新的SQL查询。
+3. 字段名必须全部来自同一个DDL语句，不能跨DDL混用字段
 4. 考虑查询性能，适当使用索引，限制条件，去重，分组等
 5. 如果问题不够明确或缺少必要信息，返回 "INSUFFICIENT_INFO"
+6. 如果无法确定使用哪个DDL，返回 "INSUFFICIENT_INFO"
 
 特别注意：当用户提到"订单"但没有指定具体类型时，默认查询表 kn_quality_trace_prod_order（生产订单表）
 
-数据库结构信息：
+数据库表结构信息（可能包含多个DDL，请选择一个完整的DDL使用）：
 {ddl_context}
 
 查询示例：
@@ -156,8 +164,16 @@ class DatabaseService:
             )
             
             # 5. 构建人类提示，使用预处理后的查询
-            human_prompt = f"""用户问题：{preprocessed.processed_query}\n\n
-                请生成对应的SQL查询：
+            human_prompt = f"""用户问题：{preprocessed.processed_query}
+
+请按照以下步骤生成SQL查询：
+
+步骤1：分析提供的DDL上下文，选择一个最相关的完整DDL语句
+步骤2：列出选择的DDL中的表结构和字段信息
+步骤3：确认所有要使用的字段都来自同一个DDL
+步骤4：生成SQL查询
+
+请直接返回SQL查询语句：
             """
             
             # 6. 调用集中式LLM服务生成SQL
@@ -176,12 +192,61 @@ class DatabaseService:
                 preprocessed.placeholders
             )
             
+            # 8. 验证SQL中的字段是否来自同一个DDL
+            if not self._validate_sql_field_consistency(final_sql, ddl_context):
+                logger.warning(f"Generated SQL contains fields from different DDLs: {final_sql}")
+                # 可以在这里添加重试逻辑或者返回更明确的错误信息
+                return None
+            
             logger.info(f"Generated SQL: {final_sql}")
             return final_sql
             
         except Exception as e:
             logger.error(f"Error generating SQL: {e}")
             return None
+    
+    def _validate_sql_field_consistency(self, sql_query: str, ddl_context: str) -> bool:
+        """验证SQL查询中的字段是否都来自同一个DDL"""
+        try:
+            import re
+            
+            # 提取SQL中的字段名（简化版本，主要检查SELECT和WHERE子句）
+            field_pattern = r'\b([a-zA-Z_][a-zA-Z0-9_]*)\b'
+            sql_fields = set(re.findall(field_pattern, sql_query.upper()))
+            
+            # 移除SQL关键字
+            sql_keywords = {
+                'SELECT', 'FROM', 'WHERE', 'AND', 'OR', 'ORDER', 'BY', 'GROUP', 'HAVING',
+                'INNER', 'LEFT', 'RIGHT', 'JOIN', 'ON', 'AS', 'ASC', 'DESC', 'LIMIT',
+                'COUNT', 'SUM', 'AVG', 'MAX', 'MIN', 'DISTINCT', 'CASE', 'WHEN', 'THEN',
+                'ELSE', 'END', 'IS', 'NULL', 'NOT', 'IN', 'LIKE', 'BETWEEN', 'EXISTS'
+            }
+            sql_fields = sql_fields - sql_keywords
+            
+            if not sql_fields:
+                return True  # 没有字段需要验证
+            
+            # 将DDL上下文按表分割
+            ddl_sections = ddl_context.split('\n\n\n')
+            
+            # 检查每个DDL部分是否包含所有字段
+            for ddl_section in ddl_sections:
+                if not ddl_section.strip():
+                    continue
+                    
+                ddl_upper = ddl_section.upper()
+                # 检查所有字段是否都在这个DDL中
+                fields_in_ddl = all(field in ddl_upper for field in sql_fields)
+                if fields_in_ddl:
+                    logger.info(f"All SQL fields found in DDL section: {sql_fields}")
+                    return True
+            
+            logger.warning(f"SQL fields not found in any single DDL: {sql_fields}")
+            return False
+            
+        except Exception as e:
+            logger.error(f"Error validating SQL field consistency: {e}")
+            return True  # 验证失败时允许通过，避免阻塞正常流程
     
     async def query_database(self, question: str, memory_info: str = "") -> Dict[str, Any]:
         """完整的数据库查询流程"""
