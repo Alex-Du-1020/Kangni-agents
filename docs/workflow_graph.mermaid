@@ -6,26 +6,26 @@ config:
 graph TD;
 	__start__([<p>__start__</p>]):::first
 	load_memory(load_memory)
-	classify_intent(classify_intent)
-	agent_reasoning(agent_reasoning)
-	tool_execution(tool_execution)
-	validate_results(validate_results)
+	rag_search(rag_search)
+	check_rag_results(check_rag_results)
+	database_query(database_query)
+	validate_db_results(validate_db_results)
 	vector_search(vector_search)
-	fallback_search(fallback_search)
+	validate_vector_results(validate_vector_results)
 	generate_response(generate_response)
 	save_memory(save_memory)
 	__end__([<p>__end__</p>]):::last
 	__start__ --> load_memory;
-	agent_reasoning --> tool_execution;
-	classify_intent --> agent_reasoning;
-	fallback_search --> generate_response;
+	check_rag_results -.-> database_query;
+	check_rag_results -.-> generate_response;
+	database_query --> validate_db_results;
 	generate_response --> save_memory;
-	load_memory --> classify_intent;
-	tool_execution --> validate_results;
-	validate_results -.-> fallback_search;
-	validate_results -.-> generate_response;
-	validate_results -.-> vector_search;
-	vector_search --> generate_response;
+	load_memory --> rag_search;
+	rag_search --> check_rag_results;
+	validate_db_results -.-> generate_response;
+	validate_db_results -.-> vector_search;
+	validate_vector_results --> generate_response;
+	vector_search --> validate_vector_results;
 	save_memory --> __end__;
 	classDef default fill:#f2f0ff,line-height:1.2
 	classDef first fill-opacity:0

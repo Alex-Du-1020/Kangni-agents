@@ -57,8 +57,8 @@ class QueryPreprocessor:
             # 项目相关字段
             "项目": ["projectname_s", "project_name", "projectcode_s", "project_code"],
             "项目名称": ["projectname_s", "project_name"],
-            "项目代码": ["projectcode_s", "project_code", "project_id"],
-            "项目编号": ["project_code", "projectcode_s", "project_id"],
+            "项目代码": ["projectcode_s", "project_code"],
+            "项目编号": ["project_code", "projectcode_s"],
             "项目年份": ["project_year", "project_project_year"],
             
             # 订单相关字段

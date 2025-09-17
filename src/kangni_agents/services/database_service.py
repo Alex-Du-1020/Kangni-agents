@@ -135,9 +135,10 @@ class DatabaseService:
 1. 只返回SQL查询语句，不要添加额外的解释
 2. 确保SQL语法正确
 3. 字段名必须全部来自同一个DDL语句，不能跨DDL混用字段
-4. 考虑查询性能，适当使用索引，限制条件，去重，分组等
-5. 如果问题不够明确或缺少必要信息，返回 "INSUFFICIENT_INFO"
-6. 如果无法确定使用哪个DDL，返回 "INSUFFICIENT_INFO"
+4. 考虑查询准确性尽量使用 like，而不是 =
+5. 考虑查询性能，适当使用索引，限制条件，去重，分组等
+6. 如果问题不够明确或缺少必要信息，返回 "INSUFFICIENT_INFO"
+7. 如果无法确定使用哪个DDL，返回 "INSUFFICIENT_INFO"
 
 特别注意：当用户提到"订单"但没有指定具体类型时，默认查询表 kn_quality_trace_prod_order（生产订单表）
 
@@ -210,18 +211,57 @@ class DatabaseService:
         try:
             import re
             
-            # 提取SQL中的字段名（简化版本，主要检查SELECT和WHERE子句）
-            field_pattern = r'\b([a-zA-Z_][a-zA-Z0-9_]*)\b'
-            sql_fields = set(re.findall(field_pattern, sql_query.upper()))
+            # 更精确地提取SQL中的字段名
+            sql_upper = sql_query.upper()
             
-            # 移除SQL关键字
+            # 提取SELECT子句中的字段
+            select_fields = set()
+            select_match = re.search(r'SELECT\s+(.*?)\s+FROM', sql_upper, re.DOTALL)
+            if select_match:
+                select_clause = select_match.group(1)
+                # 处理DISTINCT, COUNT等函数
+                select_clause = re.sub(r'\b(COUNT|SUM|AVG|MAX|MIN|DISTINCT)\s*\([^)]*\)', '', select_clause)
+                # 处理AS别名
+                select_clause = re.sub(r'\s+AS\s+\w+', '', select_clause)
+                # 提取字段名
+                field_matches = re.findall(r'\b([a-zA-Z_][a-zA-Z0-9_]*)\b', select_clause)
+                select_fields.update(field_matches)
+            
+            # 提取WHERE子句中的字段
+            where_fields = set()
+            where_match = re.search(r'WHERE\s+(.*?)(?:\s+ORDER\s+BY|\s+GROUP\s+BY|\s+LIMIT|$)', sql_upper, re.DOTALL)
+            if where_match:
+                where_clause = where_match.group(1)
+                # 移除字符串字面量（单引号包围的内容）
+                where_clause = re.sub(r"'[^']*'", '', where_clause)
+                # 移除数字字面量
+                where_clause = re.sub(r'\b\d+\b', '', where_clause)
+                # 提取字段名
+                field_matches = re.findall(r'\b([a-zA-Z_][a-zA-Z0-9_]*)\b', where_clause)
+                where_fields.update(field_matches)
+            
+            # 合并所有字段
+            sql_fields = select_fields | where_fields
+            
+            # 移除SQL关键字和表名
             sql_keywords = {
                 'SELECT', 'FROM', 'WHERE', 'AND', 'OR', 'ORDER', 'BY', 'GROUP', 'HAVING',
                 'INNER', 'LEFT', 'RIGHT', 'JOIN', 'ON', 'AS', 'ASC', 'DESC', 'LIMIT',
                 'COUNT', 'SUM', 'AVG', 'MAX', 'MIN', 'DISTINCT', 'CASE', 'WHEN', 'THEN',
-                'ELSE', 'END', 'IS', 'NULL', 'NOT', 'IN', 'LIKE', 'BETWEEN', 'EXISTS'
+                'ELSE', 'END', 'IS', 'NULL', 'NOT', 'IN', 'LIKE', 'BETWEEN', 'EXISTS',
+                'UNION', 'INTERSECT', 'EXCEPT', 'HAVING', 'WITH'
             }
-            sql_fields = sql_fields - sql_keywords
+            
+            # 移除表名（通常是大写且包含下划线的长名称）
+            table_names = set()
+            table_matches = re.findall(r'FROM\s+(\w+)', sql_upper)
+            table_names.update(table_matches)
+            
+            # 移除关键字和表名
+            sql_fields = sql_fields - sql_keywords - table_names
+            
+            # 移除空字符串和单字符
+            sql_fields = {field for field in sql_fields if field and len(field) > 1}
             
             if not sql_fields:
                 return True  # 没有字段需要验证

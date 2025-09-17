@@ -26,30 +26,25 @@ class AgentState(TypedDict):
     messages: Annotated[List[BaseMessage], add_messages]
     query: str
     intent: Optional[QueryType]
+    # RAG-related fields
     rag_results: Optional[List[RAGSearchResult]]
+    rag_content: Optional[str]
+    rag_has_results: bool
+    # Database-related fields (also used for vector search results)
     db_results: Optional[Dict[str, Any]]
     sql_query: Optional[str]
-    source_links: Optional[List[str]]
-    final_answer: Optional[str]
-    reasoning: Optional[str]
-    needs_tools: bool
-    tool_to_use: Optional[str]
-    # 新增字段支持验证和fallback流程
+    db_success: bool
     db_results_valid: bool
-    needs_fallback: bool
-    needs_vector_search: bool  # Added this missing field!
-    fallback_executed: bool
-    has_mixed_results: bool
-    vector_enhanced: Optional[bool]  # Also add this for tracking
-    suggestions_used: Optional[Dict[str, Any]]  # And this for tracking suggestions
-    validation_reason: Optional[str]  # And validation reason
+    needs_vector_search: bool
+    formatted_db_results: Optional[str]
+    # Response fields
+    final_answer: Optional[str]
+    source_links: Optional[List[str]]
     # Memory-related fields
-    memory_info: Optional[str]  # Memory context from memory service
-    user_email: Optional[str]  # User email for memory retrieval
-    session_id: Optional[str]  # Session ID for memory tracking
-    start_time: Optional[float]  # Start time for query
-    # Data formatting fields
-    formatted_db_results: Optional[str]  # LLM-formatted database results
+    memory_info: Optional[str]
+    user_email: Optional[str]
+    session_id: Optional[str]
+    start_time: Optional[float]
 
 @tool
 async def rag_search_tool(query: str, memory_info: str = "", dataset_id: Optional[str] = None) -> Dict[str, Any]:
@@ -330,60 +325,74 @@ class KangniReActAgent:
             print(f"❌ Could not visualize workflow: {e}")
     
     def _build_workflow(self) -> StateGraph:
-        """构建LangGraph工作流"""
+        """构建LangGraph工作流 - 新流程：1.加载记忆 2.RAG搜索 3.数据库查询 4.向量搜索 5.生成响应"""
         workflow = StateGraph(AgentState)
         
         # 添加节点
-        workflow.add_node("load_memory", self.load_memory_info)  # New memory node
-        workflow.add_node("classify_intent", self.classify_intent)
-        workflow.add_node("agent_reasoning", self.agent_reasoning)
-        workflow.add_node("tool_execution", self.execute_tools)
-        workflow.add_node("validate_results", self.validate_results)
-        workflow.add_node("vector_search", self.vector_search_enhancement)  # 新增向量搜索节点
-        workflow.add_node("fallback_search", self.fallback_search)
+        workflow.add_node("load_memory", self.load_memory_info)
+        workflow.add_node("rag_search", self.execute_rag_search)
+        workflow.add_node("check_rag_results", self.check_rag_results)
+        workflow.add_node("database_query", self.execute_database_query)
+        workflow.add_node("validate_db_results", self.validate_database_results)
+        workflow.add_node("vector_search", self.execute_vector_search)
+        workflow.add_node("validate_vector_results", self.validate_database_results)
         workflow.add_node("generate_response", self.generate_response)
-        workflow.add_node("save_memory", self.save_memory)  # New save memory node
+        workflow.add_node("save_memory", self.save_memory)
         
         # 设置入口点
         workflow.set_entry_point("load_memory")
         
-        # 添加基础边
-        workflow.add_edge("load_memory", "classify_intent")
-        workflow.add_edge("classify_intent", "agent_reasoning")
+        # 添加边
+        workflow.add_edge("load_memory", "rag_search")
+        workflow.add_edge("rag_search", "check_rag_results")
         
-        # 直接边：总是执行工具
-        workflow.add_edge("agent_reasoning", "tool_execution")
-        workflow.add_edge("tool_execution", "validate_results")
-        
-        # 条件边：检查是否需要向量搜索增强
-        def should_use_vector_search(state: AgentState) -> str:
-            # Debug logging
-            logger.info(f"Checking vector search condition - needs_vector_search: {state.get('needs_vector_search')}, needs_fallback: {state.get('needs_fallback')}")
+        # 条件边：检查RAG结果
+        def check_rag_condition(state: AgentState) -> str:
+            has_rag_results = state.get("rag_has_results", False)
+            logger.info(f"Checking RAG results: {has_rag_results}")
             
-            # 如果数据库查询返回0结果，使用向量搜索
-            if state.get("needs_vector_search", False):
-                logger.info("Routing to vector_search")
-                return "vector_search"
-            # 否则检查是否需要fallback
-            elif state.get("needs_fallback", False):
-                logger.info("Routing to fallback_search")
-                return "fallback_search"
-            else:
-                logger.info("Routing to generate_response")
+            if has_rag_results:
+                logger.info("RAG has results, routing to generate_response")
                 return "generate_response"
+            else:
+                logger.info("No RAG results, routing to database_query")
+                return "database_query"
         
         workflow.add_conditional_edges(
-            "validate_results", 
-            should_use_vector_search,
+            "check_rag_results",
+            check_rag_condition,
             {
-                "vector_search": "vector_search",
-                "fallback_search": "fallback_search",
-                "generate_response": "generate_response"
+                "generate_response": "generate_response",
+                "database_query": "database_query"
             }
         )
-        workflow.add_edge("vector_search", "generate_response")
-        workflow.add_edge("fallback_search", "generate_response")
-        workflow.add_edge("generate_response", "save_memory")  # Save memory after generating response
+        
+        workflow.add_edge("database_query", "validate_db_results")
+        
+        # 条件边：检查数据库结果
+        def check_db_condition(state: AgentState) -> str:
+            has_valid_db_results = state.get("db_results_valid", False)
+            logger.info(f"Checking database results: {has_valid_db_results}")
+            
+            if has_valid_db_results:
+                logger.info("Database has valid results, routing to generate_response")
+                return "generate_response"
+            else:
+                logger.info("No valid database results, routing to vector_search")
+                return "vector_search"
+        
+        workflow.add_conditional_edges(
+            "validate_db_results",
+            check_db_condition,
+            {
+                "generate_response": "generate_response",
+                "vector_search": "vector_search"
+            }
+        )
+        
+        workflow.add_edge("vector_search", "validate_vector_results")
+        workflow.add_edge("validate_vector_results", "generate_response")
+        workflow.add_edge("generate_response", "save_memory")
         workflow.add_edge("save_memory", END)
         
         return workflow.compile()
@@ -442,198 +451,124 @@ class KangniReActAgent:
             "memory_info": memory_info
         }
     
-    async def classify_intent(self, state: AgentState) -> AgentState:
-        """意图分类节点"""
-        query = state["query"]
-        intent = intent_classifier.classify_intent(query)
-        explanation = intent_classifier.get_classification_explanation(query, intent)
-        
-        logger.info(f"Intent classified as: {intent} - {explanation}")
-        
-        return {
-            **state,
-            "intent": intent,
-            "reasoning": explanation
-        }
-    
-    async def agent_reasoning(self, state: AgentState) -> AgentState:
-        """Agent推理节点"""
-        query = state["query"]
-        intent = state["intent"]
-        memory_info = state.get("memory_info", {})
-        
-        # 构建系统提示
-        system_prompt = f"""你是一个智能助手，需要分析用户问题并决定使用哪些工具。你有两个工具可用：
-
-1. rag_search_tool: 用于搜索文档和知识库，适合回答概念、原因、方法等问题
-2. database_query_tool: 用于查询数据库，适合回答统计、数据分析等问题
-   - 特别注意：当用户提到"订单"但没有指定具体类型时，系统会默认查询 kn_quality_trace_prod_order（生产订单表）
-
-当前问题意图分类为: {intent}
-分类原因: {state.get('reasoning', '')}
-
-用户问题: {query}
-
-请分析问题并决定使用哪些工具：
-1. 如果问题明确需要数据库查询（如统计、计数、具体数据），选择 database_query_tool
-2. 如果问题明确需要文档搜索（如概念解释、原因分析），选择 rag_search_tool  
-3. 如果问题意图不明确或需要综合信息，选择 both（同时使用两个工具）
-4. 考虑用户的历史交互模式，如果用户通常询问某类问题，可以参考历史偏好
-
-请按以下格式回答：
-工具选择: [rag_search_tool/database_query_tool/both]
-理由: [简要说明为什么选择这些工具]
-"""
-        
-        # 转换消息格式为LLMMessage
-        llm_messages = [
-            LLMMessage(role="system", content=system_prompt),
-            LLMMessage(role="user", content=query)
-        ]
-        
-        # Debug logging for LLM input
-        logger.debug(f"LLM reasoning input: {system_prompt}")
-        
-        try:
-            response = await llm_service.chat(llm_messages)
-            
-            # Debug logging for LLM output
-            logger.debug(f"LLM reasoning output: {response.content}")
-            
-            # 解析响应，确定工具选择
-            response_text = response.content.lower()
-            
-            # 确定工具类型
-            tool_to_use = None
-            needs_tools = True  # 总是需要工具，不再直接回答
-            
-            if "工具选择: both" in response_text or "工具选择：both" in response_text:
-                tool_to_use = "both"
-            elif "rag_search_tool" in response_text:
-                tool_to_use = "rag_search_tool"
-            elif "database_query_tool" in response_text:
-                tool_to_use = "database_query_tool"
-            else:
-                # 默认使用both工具
-                tool_to_use = "both"
-            
-            logger.info(f"Tool analysis: needs_tools={needs_tools}, tool_to_use={tool_to_use}")
-            
-            # 创建AIMessage响应
-            ai_message = AIMessage(content=response.content)
-            
-            return {
-                **state,
-                "needs_tools": needs_tools,
-                "tool_to_use": tool_to_use,
-                "messages": [*state["messages"], ai_message]
-            }
-            
-        except Exception as e:
-            logger.error(f"LLM reasoning error: {e}")
-            error_message = AIMessage(content=f"抱歉，分析您的问题时发生错误: {str(e)}")
-            return {
-                **state,
-                "needs_tools": False,
-                "messages": [*state["messages"], error_message]
-            }
-    
-    async def execute_tools(self, state: AgentState) -> AgentState:
-        """工具执行节点"""
-        tool_to_use = state.get("tool_to_use")
+    async def execute_rag_search(self, state: AgentState) -> AgentState:
+        """执行RAG搜索"""
         query = state["query"]
         memory_info = state.get("memory_info", "")
         
-        if not tool_to_use:
-            logger.warning("No tool specified for execution")
-            return state
-            
-        logger.info(f"Executing tool: {tool_to_use} with query: {query}")
+        logger.info(f"Executing RAG search for query: {query}")
         
         try:
-            messages = state["messages"]
+            result = await rag_search_tool.ainvoke({"query": query, "memory_info": memory_info})
             
-            if tool_to_use == "rag_search_tool":
-                result = await rag_search_tool.ainvoke({"query": query, "memory_info": memory_info})
-                
-                # 存储RAG结果
-                state["rag_results"] = result.get("rag_results", [])
-                
-                # 创建工具消息 - 直接使用LLM生成的答案
-                tool_message = AIMessage(content=f"RAG搜索结果：\n{result['content']}")
-                messages.append(tool_message)
-                
-            elif tool_to_use == "database_query_tool":
-                result = await database_query_tool.ainvoke({"question": query, "memory_info": memory_info})
-                
-                # 存储数据库结果
-                state["db_results"] = result.get("results", [])
-                state["sql_query"] = result.get("sql_query")
-                
-                # 创建工具消息
-                tool_message = AIMessage(content=f"数据库查询结果：\n{result['content']}")
-                messages.append(tool_message)
-                
-            elif tool_to_use == "both":
-                # 同时执行两个工具
-                logger.info("Executing both RAG and database tools")
-                
-                # 执行RAG搜索
-                rag_result = await rag_search_tool.ainvoke({"query": query, "memory_info": memory_info})
-                state["rag_results"] = rag_result.get("rag_results", [])
-                rag_message = AIMessage(content=f"RAG搜索结果：\n{rag_result['content']}")
-                messages.append(rag_message)
-                
-                if "未找到相关文档信息" in rag_result['content']:
-                    # 执行数据库查询
-                    db_result = await database_query_tool.ainvoke({"question": query, "memory_info": memory_info})
-                    state["db_results"] = db_result.get("results", [])
-                    state["sql_query"] = db_result.get("sql_query")
-                    db_message = AIMessage(content=f"数据库查询结果：\n{db_result['content']}")
-                    messages.append(db_message)
-                    
-                    logger.info("Both tools executed successfully")
-                else:
-                    tool_to_use = "rag_search_tool"
-                    logger.info("RAG search successfully, skipping database query")
-                
-            else:
-                tool_message = AIMessage(content=f"未知工具: {tool_to_use}")
-                messages.append(tool_message)
+            # 存储RAG结果
+            rag_results = result.get("rag_results", [])
+            content = result.get("content", "")
             
-            logger.debug(f"Tool {tool_to_use} execution completed")
+            # 检查是否有有效结果 - 更严格的条件
+            has_results = bool(
+                content and 
+                content.strip() and 
+                "未找到相关文档信息" not in content and
+                "找不到" not in content and
+                "没有找到" not in content and
+                "无法找到" not in content and
+                len(content.strip()) > 50  # 确保有足够的内容
+            )
+            
+            # 创建工具消息
+            tool_message = AIMessage(content=f"RAG搜索结果：\n{content}")
+            
+            logger.info(f"RAG search completed. Has results: {has_results}")
             
             return {
                 **state,
-                "tool_to_use": tool_to_use,
-                "messages": messages
+                "rag_results": rag_results,
+                "rag_content": content,
+                "rag_has_results": has_results,
+                "messages": [*state["messages"], tool_message]
             }
             
         except Exception as e:
-            logger.error(f"Tool execution error: {e}")
-            error_message = AIMessage(content=f"工具执行错误: {str(e)}")
+            logger.error(f"RAG search error: {e}")
+            error_message = AIMessage(content=f"RAG搜索时发生错误: {str(e)}")
             return {
                 **state,
+                "rag_has_results": False,
                 "messages": [*state["messages"], error_message]
             }
     
+    async def check_rag_results(self, state: AgentState) -> AgentState:
+        """检查RAG搜索结果"""
+        # 这个节点主要用于路由决策，状态已经在execute_rag_search中设置
+        return state
     
-    async def validate_results(self, state: AgentState) -> AgentState:
-        """验证工具执行结果的有效性 - 使用LLM智能判断"""
-        tool_to_use = state.get("tool_to_use")
+    async def execute_database_query(self, state: AgentState) -> AgentState:
+        """执行数据库查询"""
+        query = state["query"]
+        memory_info = state.get("memory_info", "")
         
-        if tool_to_use in ["database_query_tool", "both"]:
-            # 获取数据库查询结果
-            db_results = state.get("db_results", [])
-            sql_query = state.get("sql_query")
-            query = state["query"]
+        logger.info(f"Executing database query for: {query}")
+        
+        try:
+            result = await database_query_tool.ainvoke({"question": query, "memory_info": memory_info})
             
-            # 获取RAG结果（如果使用了both工具）
-            rag_results = state.get("rag_results", [])
-            memory_info = state.get("memory_info", {})
+            # 存储数据库结果
+            db_results = result.get("results", [])
+            sql_query = result.get("sql_query")
+            success = result.get("success", False)
             
-            # 构建让LLM判断和格式化的提示
-            validation_prompt = f"""请分析以下工具执行结果，判断查询是否成功。如果查询结果成功，直接格式化结果。如果失败，判断是否需要使用向量搜索增强。
+            # 创建工具消息
+            tool_message = AIMessage(content=f"数据库查询结果：\n{result['content']}")
+            
+            logger.info(f"Database query completed. Success: {success}, Results count: {len(db_results) if db_results else 0}")
+            
+            return {
+                **state,
+                "db_results": db_results,
+                "sql_query": sql_query,
+                "db_success": success,
+                "messages": [*state["messages"], tool_message]
+            }
+            
+        except Exception as e:
+            logger.error(f"Database query error: {e}")
+            error_message = AIMessage(content=f"数据库查询时发生错误: {str(e)}")
+            return {
+                **state,
+                "db_success": False,
+                "messages": [*state["messages"], error_message]
+            }
+    
+    async def validate_database_results(self, state: AgentState) -> AgentState:
+        """验证工具执行结果的有效性 - 使用LLM智能判断"""
+
+        db_results = state.get("db_results", [])
+        sql_query = state.get("sql_query")
+        db_success = state.get("db_success", False)
+        query = state["query"]
+        memory_info = state.get("memory_info", {})
+            
+        # 安全地序列化数据库结果，避免JSON转义问题
+        def safe_serialize_results(results):
+            if not results:
+                return "空结果"
+            try:
+                # 使用json.dumps确保正确的JSON格式
+                json_str = json.dumps(results, ensure_ascii=False, indent=2)
+                return json_str
+            except (TypeError, ValueError) as e:
+                # 如果JSON序列化失败，使用简单的字符串表示
+                logger.warning(f"JSON serialization failed: {e}, using fallback")
+                if isinstance(results, list):
+                    return f"结果列表，共{len(results)}条记录"
+                elif isinstance(results, dict):
+                    return f"结果字典，包含{len(results)}个字段"
+                else:
+                    return str(results)
+
+        # 构建让LLM判断和格式化的提示
+        validation_prompt = f"""请分析以下工具执行结果，判断查询是否成功。如果查询结果成功，直接格式化结果。
 
 第一步需要理解用户的问题，根据下面的步骤理解用户的问题。
 1. 先检查用户问题是否需要历史记忆来回答  
@@ -645,9 +580,7 @@ class KangniReActAgent:
 
 生成的SQL: {sql_query if sql_query else "无"}
 
-数据库查询结果: {json.dumps(db_results, ensure_ascii=False, indent=2) if db_results else "空结果"}
-
-RAG搜索结果: {"找到相关文档" if rag_results else "无RAG结果"}
+数据库查询结果: {safe_serialize_results(db_results)}
 
 请按以下步骤处理：
 
@@ -655,7 +588,6 @@ RAG搜索结果: {"找到相关文档" if rag_results else "无RAG结果"}
    - SQL查询是否成功生成？（是/否）
    - 数据库查询是否返回了有效数据？（是/否）
    - 如果没有返回数据，是否应该使用向量搜索来找到正确的数据库值？（是/否）
-   - 如果向量搜索也不适用，是否应该使用RAG文档搜索作为备用方案？（是/否）
 
 2. 如果数据库查询返回了有效数据，请直接格式化结果：
    - 用自然语言回答用户的问题
@@ -665,324 +597,145 @@ RAG搜索结果: {"找到相关文档" if rag_results else "无RAG结果"}
    - 保持回答简洁明了，重点突出
 
 判断标准：
-- 如果SQL生成成功但返回0条记录，很可能是查询条件中的值不准确（如项目名称拼写错误），应该使用向量搜索
-- 如果SQL生成失败或查询出错，应该使用RAG作为备用方案
+- 如果SQL生成成功但返回0条记录，则认为失败
+- 如果SQL运行报错，则认为失败
 - 如果查询返回了数据，则认为成功，不需要额外操作
-- 如果使用了both工具且RAG有结果，优先使用数据库结果，RAG作为补充
 
 请按以下格式回答：
 SQL生成成功: [是/否]
-有效数据: [是/否]  
-需要向量搜索: [是/否]
-需要RAG备用: [是/否]
-原因: [简要说明判断理由]
+有效数据: [是/否]
 格式化结果: [如果有效数据，请直接给出格式化的回答，否则写"无"]"""
 
-            # 转换消息格式为LLMMessage
-            llm_messages = [
-                LLMMessage(role="system", content="你是一个数据库查询结果分析助手，需要准确判断查询结果的有效性。"),
-                LLMMessage(role="user", content=validation_prompt)
-            ]
+        # 转换消息格式为LLMMessage
+        llm_messages = [
+            LLMMessage(role="system", content="你是一个数据库查询结果分析助手，需要准确判断查询结果的有效性。"),
+            LLMMessage(role="user", content=validation_prompt)
+        ]
+        
+        # 不设置max_tokens，让服务器使用默认值
+        response = await llm_service.chat(llm_messages)
+        response_text = response.content.lower()
+        
+        # 解析LLM的判断结果
+        has_valid_sql = "sql生成成功: 是" in response_text or "sql生成成功：是" in response_text
+        has_valid_data = "有效数据: 是" in response_text or "有效数据：是" in response_text
+        needs_vector = "需要向量搜索: 是" in response_text or "需要向量搜索：是" in response_text
+              
+        # 提取格式化结果
+        formatted_db_results = None
+        format_match = response_text.find("格式化结果:")
+        if format_match == -1:
+            format_match = response_text.find("格式化结果：")
+        
+        if format_match != -1:
+            # 提取格式化结果部分（包括多行）
+            format_text = response_text[format_match:]
+            if "格式化结果:" in format_text:
+                formatted_db_results = format_text.split("格式化结果:")[1].strip()
+            elif "格式化结果：" in format_text:
+                formatted_db_results = format_text.split("格式化结果：")[1].strip()
             
-            try:
-                response = await llm_service.chat(llm_messages)
-                response_text = response.content.lower()
-                
-                # 解析LLM的判断结果
-                has_valid_sql = "sql生成成功: 是" in response_text or "sql生成成功：是" in response_text
-                has_valid_data = "有效数据: 是" in response_text or "有效数据：是" in response_text
-                needs_vector = "需要向量搜索: 是" in response_text or "需要向量搜索：是" in response_text
-                needs_rag = "需要rag备用: 是" in response_text or "需要rag备用：是" in response_text
-                
-                # 提取原因
-                reason_match = response_text.find("原因:")
-                if reason_match == -1:
-                    reason_match = response_text.find("原因：")
-                reason = response_text[reason_match:].split('\n')[0] if reason_match != -1 else "未提供原因"
-                
-                # 提取格式化结果
+            # 如果格式化结果是"无"或空，则设为None
+            if formatted_db_results in ["无", "", "无数据", "无结果"]:
                 formatted_db_results = None
-                format_match = response_text.find("格式化结果:")
-                if format_match == -1:
-                    format_match = response_text.find("格式化结果：")
+        
+        # 如果没有从LLM获取到格式化结果，但有有效数据，使用简单格式化
+        if has_valid_data and db_results and not formatted_db_results:
+            formatted_db_results = self._format_database_response(db_results, sql_query)
+        
+        logger.info(f"LLM validation result: sql_valid={has_valid_sql}, data_valid={has_valid_data}, needs_vector={needs_vector}")
+        logger.info(f"Formatted results: {'Yes' if formatted_db_results else 'No'}")
                 
-                if format_match != -1:
-                    # 提取格式化结果部分（包括多行）
-                    format_text = response_text[format_match:]
-                    if "格式化结果:" in format_text:
-                        formatted_db_results = format_text.split("格式化结果:")[1].strip()
-                    elif "格式化结果：" in format_text:
-                        formatted_db_results = format_text.split("格式化结果：")[1].strip()
-                    
-                    # 如果格式化结果是"无"或空，则设为None
-                    if formatted_db_results in ["无", "", "无数据", "无结果"]:
-                        formatted_db_results = None
-                
-                # 如果没有从LLM获取到格式化结果，但有有效数据，使用简单格式化
-                if has_valid_data and db_results and not formatted_db_results:
-                    formatted_db_results = self._format_database_response(db_results, sql_query)
-                
-                logger.info(f"LLM validation result: sql_valid={has_valid_sql}, data_valid={has_valid_data}, needs_vector={needs_vector}, needs_rag={needs_rag}")
-                logger.info(f"Validation reason: {reason}")
-                logger.info(f"Formatted results: {'Yes' if formatted_db_results else 'No'}")
-                
-                return {
-                    **state,
-                    "db_results_valid": has_valid_data,
-                    "needs_vector_search": needs_vector,  # Changed from needs_vector_search to match what we check
-                    "needs_fallback": needs_rag,
-                    "fallback_executed": False,
-                    "validation_reason": reason,
-                    "formatted_db_results": formatted_db_results
-                }
-                
-            except Exception as e:
-                logger.error(f"LLM validation error: {e}, falling back to simple check")
-                # 如果LLM判断失败，使用简单的备用逻辑
-                # 检查是否有SQL和结果
-                has_sql = bool(sql_query)
-                has_results = False
-                
-                # 尝试多种方式检查是否有结果
-                if db_results:
-                    if isinstance(db_results, list) and len(db_results) > 0:
-                        has_results = True
-                    elif isinstance(db_results, dict) and db_results:
-                        has_results = True
-                    elif isinstance(db_results, str) and db_results.strip():
-                        has_results = True
-                
-                # 简单判断逻辑
-                needs_vector_search = has_sql and not has_results and state.get("intent") == QueryType.DATABASE
-                needs_fallback = not has_sql or (not has_results and state.get("intent") != QueryType.DATABASE)
-                
-                # If database results are valid, format them using simple formatting
-                formatted_db_results = None
-                if has_sql and has_results and db_results:
-                    formatted_db_results = self._format_database_response(db_results, sql_query)
-                    logger.info("Database results formatted using simple formatting (fallback)")
-                
-                logger.info(f"Fallback validation: has_sql={has_sql}, has_results={has_results}, needs_vector={needs_vector_search}, needs_fallback={needs_fallback}")
-                
-                return {
-                    **state,
-                    "db_results_valid": has_sql and has_results,
-                    "needs_vector_search": needs_vector_search,
-                    "needs_fallback": needs_fallback,
-                    "fallback_executed": False,
-                    "validation_reason": "使用备用验证逻辑",
-                    "formatted_db_results": formatted_db_results
-                }
-        else:
-            # RAG搜索或其他情况，直接认为有效
-            return {
-                **state,
-                "db_results_valid": True,
-                "needs_vector_search": False,
-                "needs_fallback": False,
-                "fallback_executed": False,
-                "validation_reason": "RAG搜索，无需数据库验证"
-            }
-
-    async def vector_search_enhancement(self, state: AgentState) -> AgentState:
-        """使用向量搜索增强数据库查询"""
+        return {
+            **state,
+            "db_results_valid": has_valid_data,
+            "needs_vector_search": not has_valid_data,  # Changed from needs_vector_search to match what we check
+            "formatted_db_results": formatted_db_results
+        }
+    
+    async def execute_vector_search(self, state: AgentState) -> AgentState:
+        """执行向量搜索增强"""
         query = state["query"]
         failed_sql = state.get("sql_query")
         memory_info = state.get("memory_info", "")
-
-        logger.info(f"Starting vector search enhancement for query: {query}")
+        
+        logger.info(f"Executing vector search enhancement for: {query}")
         
         try:
-            # 调用向量数据库查询工具
             result = await vector_database_query_tool.ainvoke({
                 "question": query,
-                "failed_sql": failed_sql,
+                "failed_sql": failed_sql or "",
                 "memory_info": memory_info
             })
             
-            # 检查向量搜索是否成功
-            # 注意：对于COUNT查询，即使结果是0也是成功的查询
-            vector_success = result.get("success", False)
+            # 使用数据库状态字段存储向量搜索结果
+            db_success = result.get("success", False)
+            results = result.get("results", [])
             
-            if vector_success:
-                # 向量搜索成功，更新状态
-                results = result.get("results", [])
-                logger.info(f"Vector search successful, found {len(results)} results")
-                
-                # 创建工具消息，显示具体的查询结果
-                tool_message = AIMessage(
-                    content=f"向量搜索增强结果：\n{result.get('content', '')}"
-                )
-                
-                return {
-                    **state,
-                    "db_results": results,
-                    "sql_query": result.get("sql_query"),
-                    "vector_enhanced": True,
-                    "suggestions_used": result.get("suggestions_used", {}),
-                    "db_results_valid": True,  # 即使COUNT是0，也是有效的查询结果
-                    "messages": [*state["messages"], tool_message]
-                }
-            else:
-                # 向量搜索失败（比如SQL生成失败）
-                logger.warning("Vector search enhancement failed")
-                
-                no_result_message = AIMessage(
-                    content="向量搜索未能找到匹配的数据库值，可能需要检查查询条件"
-                )
-                
-                # 如果向量搜索也失败，可能需要尝试RAG
-                return {
-                    **state,
-                    "vector_enhanced": False,
-                    "needs_fallback": True,  # 尝试RAG作为最后的手段
-                    "messages": [*state["messages"], no_result_message]
-                }
-                
-        except Exception as e:
-            logger.error(f"Vector search enhancement error: {e}")
-            error_message = AIMessage(content=f"向量搜索增强时发生错误: {str(e)}")
+            # 创建工具消息
+            tool_message = AIMessage(content=f"向量搜索增强结果：\n{result.get('content', '')}")
+            
+            logger.info(f"Vector search completed. Success: {db_success}, Results count: {len(results) if results else 0}")
             
             return {
                 **state,
-                "vector_enhanced": False,
-                "needs_fallback": True,  # 出错时尝试RAG
+                "db_results": results,
+                "sql_query": result.get("sql_query"),
+                "db_success": db_success,
+                "messages": [*state["messages"], tool_message]
+            }
+            
+        except Exception as e:
+            logger.error(f"Vector search error: {e}")
+            error_message = AIMessage(content=f"向量搜索时发生错误: {str(e)}")
+            return {
+                **state,
+                "db_success": False,
                 "messages": [*state["messages"], error_message]
             }
     
-    async def fallback_search(self, state: AgentState) -> AgentState:
-        """当数据库查询无效结果时，执行RAG搜索作为fallback"""
-        query = state["query"]
-        memory_info = state.get("memory_info", "")
-        
-        logger.info(f"Executing RAG fallback search for query: {query}")
-        
-        try:
-            # 执行RAG搜索
-            result = await rag_search_tool.ainvoke({"query": query, "memory_info": memory_info})
-            
-            # 存储RAG结果
-            rag_results = result.get("rag_results", [])
-            source_links = result.get("source_links", [])
-            
-            # 检查RAG是否有有效结果
-            has_rag_results = bool(result.get("content") and result["content"].strip())
-            
-            if has_rag_results:
-                # 标记为混合结果（包含SQL和RAG）
-                has_mixed_results = bool(state.get("sql_query"))
-                
-                # 创建工具消息
-                tool_message = AIMessage(content=f"RAG搜索结果（作为补充）：\n{result['content']}")
-                
-                logger.info(f"Fallback search successful: found RAG answer")
-                
-                return {
-                    **state,
-                    "rag_results": rag_results,
-                    "source_links": source_links,
-                    "fallback_executed": True,
-                    "has_mixed_results": has_mixed_results,
-                    "messages": [*state["messages"], tool_message]
-                }
-            else:
-                # RAG也没有找到结果
-                no_result_message = AIMessage(content="RAG搜索也未找到相关信息")
-                
-                logger.warning("Fallback search found no results")
-                
-                return {
-                    **state,
-                    "fallback_executed": True,
-                    "has_mixed_results": False,
-                    "messages": [*state["messages"], no_result_message]
-                }
-                
-        except Exception as e:
-            logger.error(f"Fallback search error: {e}")
-            error_message = AIMessage(content=f"补充搜索时发生错误: {str(e)}")
-            return {
-                **state,
-                "fallback_executed": True,
-                "messages": [*state["messages"], error_message]
-            }
     
     async def generate_response(self, state: AgentState) -> AgentState:
-        """生成最终回答"""
-        # 检查工具执行结果类型
-        tool_to_use = state.get("tool_to_use")
-        rag_results = state.get("rag_results", [])
-        db_results = state.get("db_results", [])
-        sql_query = state.get("sql_query")
+        """生成最终回答 - 按照新流程：RAG -> 数据库 -> 向量搜索"""
+        rag_has_results = state.get("rag_has_results", False)
+        db_results_valid = state.get("db_results_valid", False)
+        formatted_db_results = state.get("formatted_db_results")
         
-        # 如果只有RAG结果，直接返回RAG答案
-        if tool_to_use == "rag_search_tool" and rag_results:
-            # 从RAG工具消息中提取答案
-            rag_answer = ""
-            for msg in state["messages"]:
-                if isinstance(msg, AIMessage) and "RAG搜索结果" in msg.content:
-                    # 提取RAG答案（去掉"RAG搜索结果："前缀）
-                    content = msg.content
-                    if "RAG搜索结果：\n" in content:
-                        rag_answer = content.split("RAG搜索结果：\n", 1)[1]
-                    else:
-                        rag_answer = content
-                    break
-            
-            if rag_answer:
-                logger.info("Returning RAG answer directly")
-                ai_message = AIMessage(content=rag_answer)
+        logger.info(f"Generating response - RAG: {rag_has_results}, DB: {db_results_valid}")
+        
+        # 1. 如果RAG有结果，直接返回RAG答案
+        if rag_has_results:
+            rag_content = state.get("rag_content", "")
+            if rag_content:
+                logger.info("Returning RAG answer")
+                ai_message = AIMessage(content=rag_content)
                 return {
                     **state,
-                    "final_answer": rag_answer,
+                    "final_answer": rag_content,
                     "messages": [*state["messages"], ai_message]
                 }
         
-        # 如果只有数据库结果，使用预格式化的结果或格式化数据
-        elif tool_to_use == "database_query_tool" and db_results:
-            # 优先使用LLM预格式化的结果
-            if state.get("formatted_db_results"):
-                formatted_answer = state["formatted_db_results"]
-                logger.info("Returning LLM-formatted database response")
-            else:
-                # 回退到简单格式化
-                formatted_answer = self._format_database_response(db_results, sql_query)
-                logger.info("Returning simple formatted database response")
-            
-            ai_message = AIMessage(content=formatted_answer)
+        # 2. 如果数据库查询有有效结果，返回格式化结果
+        elif db_results_valid and formatted_db_results:
+            logger.info("Returning formatted database/vector search answer")
+            ai_message = AIMessage(content=formatted_db_results)
             return {
                 **state,
-                "final_answer": formatted_answer,
+                "final_answer": formatted_db_results,
                 "messages": [*state["messages"], ai_message]
             }
         
-        # 如果有混合结果，优先使用RAG答案
-        elif state.get("has_mixed_results", False) and rag_results:
-            # 从RAG工具消息中提取答案
-            rag_answer = ""
-            for msg in state["messages"]:
-                if isinstance(msg, AIMessage) and "RAG搜索结果" in msg.content:
-                    content = msg.content
-                    if "RAG搜索结果：\n" in content:
-                        rag_answer = content.split("RAG搜索结果：\n", 1)[1]
-                    else:
-                        rag_answer = content
-                    break
+        # 3. 如果都没有结果，返回无法找到信息的消息
+        else:
+            no_result_message = "抱歉，无法找到与您问题相关的信息。请尝试重新表述您的问题或提供更多详细信息。"
+            logger.warning("No valid results found from any source")
             
-            if rag_answer:
-                logger.info("Returning RAG answer from mixed results")
-                ai_message = AIMessage(content=rag_answer)
-                return {
-                    **state,
-                    "final_answer": rag_answer,
-                    "messages": [*state["messages"], ai_message]
-                }
-            else:
-                return {
-                    **state,
-                    "final_answer": "抱歉，没有找到相关信息",
-                    "messages": [*state["messages"], AIMessage(content="抱歉，没有找到相关信息")]
-                }
+            ai_message = AIMessage(content=no_result_message)
+            return {
+                **state,
+                "final_answer": no_result_message,
+                "messages": [*state["messages"], ai_message]
+            }
     
     def _format_database_response(self, db_results: List[Dict], sql_query: str = None) -> str:
         """格式化数据库查询结果"""
@@ -1140,29 +893,25 @@ SQL生成成功: [是/否]
                 "messages": [HumanMessage(content=question)],
                 "query": question,
                 "intent": None,
+                # RAG-related fields
                 "rag_results": None,
+                "rag_content": None,
+                "rag_has_results": False,
+                # Database-related fields (also used for vector search results)
                 "db_results": None,
                 "sql_query": None,
-                "source_links": None,
-                "final_answer": None,
-                "reasoning": None,
-                "needs_tools": False,
-                "tool_to_use": None,
-                # 新增字段的默认值
+                "db_success": False,
                 "db_results_valid": False,
-                "needs_fallback": False,
-                "needs_vector_search": False,  # Added
-                "fallback_executed": False,
-                "has_mixed_results": False,
-                "vector_enhanced": None,  # Added
-                "suggestions_used": None,  # Added
-                "validation_reason": None,  # Added
+                "needs_vector_search": False,
+                "formatted_db_results": None,
+                # Response fields
+                "final_answer": None,
+                "source_links": None,
                 # Memory-related fields
                 "memory_info": None,
                 "user_email": user_email,
                 "session_id": session_id,
-                # Data formatting fields
-                "formatted_db_results": None
+                "start_time": time.time()
             }
             
             # 运行工作流
@@ -1184,15 +933,26 @@ SQL生成成功: [是/否]
                 if not answer or answer.strip() == "":
                     answer = "抱歉，无法生成回答"
             
+            # 确定查询类型
+            query_type = final_state.get("intent")
+            if not query_type:
+                # 根据结果来源确定查询类型
+                if final_state.get("rag_has_results", False):
+                    query_type = QueryType.RAG
+                elif final_state.get("db_results_valid", False):
+                    query_type = QueryType.DATABASE
+                else:
+                    query_type = QueryType.HYBRID
+            
             # 构建增强的响应
             response = QueryResponse(
                 answer=answer,
-                query_type=final_state.get("intent", QueryType.HYBRID),
-                reasoning=final_state.get("reasoning"),
+                query_type=query_type,
+                reasoning=None,  # 简化响应，不再包含reasoning
                 confidence=0.8
             )
             
-            # 添加SQL查询信息（如果来自数据库）
+            # 添加SQL查询信息
             if final_state.get("sql_query"):
                 response.sql_query = final_state["sql_query"]
             
@@ -1213,7 +973,11 @@ SQL生成成功: [是/否]
                 # 转换为列表格式
                 response.sources = list(unique_documents.values())
             
-            logger.info(f"Query completed successfully. SQL: {bool(response.sql_query)}, Sources: {len(response.sources) if response.sources else 0}")
+            # 记录查询完成情况
+            rag_used = final_state.get("rag_has_results", False)
+            db_used = final_state.get("db_results_valid", False)
+            
+            logger.info(f"Query completed - RAG: {rag_used}, DB: {db_used}, SQL: {bool(response.sql_query)}, Sources: {len(response.sources) if response.sources else 0}")
             
             return response
             

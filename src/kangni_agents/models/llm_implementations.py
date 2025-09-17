@@ -367,23 +367,33 @@ class OllamaProvider(BaseLLMProvider):
             if stream:
                 return self._stream_chat(client, payload)
             else:
-                response = await client.post(
-                    f"{self.base_url}/chat/completions",
-                    headers=self.headers,
-                    json=payload
-                )
-                response.raise_for_status()
-                
-                result = response.json()
-                choice = result["choices"][0]
-                
-                return LLMResponse(
-                    content=choice["message"]["content"],
-                    usage=result.get("usage"),
-                    model=result.get("model", self.config.model_name),
-                    provider=self.config.provider,
-                    finish_reason=choice.get("finish_reason")
-                )
+                try:
+                    response = await client.post(
+                        f"{self.base_url}/chat/completions",
+                        headers=self.headers,
+                        json=payload
+                    )
+                    response.raise_for_status()
+                    
+                    result = response.json()
+                    choice = result["choices"][0]
+                    
+                    return LLMResponse(
+                        content=choice["message"]["content"],
+                        usage=result.get("usage"),
+                        model=result.get("model", self.config.model_name),
+                        provider=self.config.provider,
+                        finish_reason=choice.get("finish_reason")
+                    )
+                except httpx.HTTPStatusError as e:
+                    logger.error(f"HTTP error {e.response.status_code}: {e.response.text}")
+                    # 尝试手动序列化JSON来调试
+                    try:
+                        manual_json = json.dumps(payload, ensure_ascii=False)
+                        logger.debug(f"Manual JSON serialization successful: {len(manual_json)} chars")
+                    except Exception as json_error:
+                        logger.error(f"Manual JSON serialization failed: {json_error}")
+                    raise e
     
     async def _stream_chat(self, client: httpx.AsyncClient, payload: Dict[str, Any]) -> AsyncGenerator[str, None]:
         """流式聊天"""
