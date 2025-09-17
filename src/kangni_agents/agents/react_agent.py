@@ -472,7 +472,6 @@ class KangniReActAgent:
 当前问题意图分类为: {intent}
 分类原因: {state.get('reasoning', '')}
 
-{memory_info}
 用户问题: {query}
 
 请分析问题并决定使用哪些工具：
@@ -595,6 +594,7 @@ class KangniReActAgent:
                     
                     logger.info("Both tools executed successfully")
                 else:
+                    tool_to_use = "rag_search_tool"
                     logger.info("RAG search successfully, skipping database query")
                 
             else:
@@ -605,6 +605,7 @@ class KangniReActAgent:
             
             return {
                 **state,
+                "tool_to_use": tool_to_use,
                 "messages": messages
             }
             

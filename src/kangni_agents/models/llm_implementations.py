@@ -46,8 +46,8 @@ class LLMProviderConfig:
     }
     
     OLLAMA_CONFIG = {
-        "base_url": "http://localhost:11434",
-        "model_name": "gpt-oss:20b",
+        "base_url": "http://158.193.6.221:8001/v1",
+        "model_name": "/data/model/models/openai-mirror/gpt-oss-20b",
         "temperature": 0.1,
         "max_tokens": None,
         "timeout": 180  # Increased timeout for local Ollama
@@ -333,7 +333,8 @@ class OllamaProvider(BaseLLMProvider):
         super().__init__(config)
         self.base_url = config.base_url or "http://localhost:11434"
         self.headers = {
-            "Content-Type": "application/json"
+            "Content-Type": "application/json",
+            "Authorization": "Bearer EMPTY"  # 根据你的curl命令添加
         }
     
     async def chat(
@@ -342,7 +343,7 @@ class OllamaProvider(BaseLLMProvider):
         stream: bool = False,
         **kwargs
     ) -> Union[LLMResponse, AsyncGenerator[str, None]]:
-        """Ollama聊天接口"""
+        """Ollama聊天接口（使用OpenAI兼容格式）"""
         
         # 转换消息格式
         ollama_messages = [
@@ -354,59 +355,53 @@ class OllamaProvider(BaseLLMProvider):
             "model": self.config.model_name,
             "messages": ollama_messages,
             "stream": stream,
-            "options": {
-                "temperature": self.config.temperature,
-                **self.config.extra_params
-            },
+            "temperature": self.config.temperature,
+            **self.config.extra_params,
             **kwargs
         }
         
         if self.config.max_tokens:
-            payload["options"]["num_predict"] = self.config.max_tokens
+            payload["max_tokens"] = self.config.max_tokens
         
         async with httpx.AsyncClient(timeout=self.config.timeout) as client:
             if stream:
                 return self._stream_chat(client, payload)
             else:
                 response = await client.post(
-                    f"{self.base_url}/api/chat",
+                    f"{self.base_url}/chat/completions",
                     headers=self.headers,
                     json=payload
                 )
                 response.raise_for_status()
                 
                 result = response.json()
+                choice = result["choices"][0]
                 
                 return LLMResponse(
-                    content=result["message"]["content"],
-                    usage={
-                        "prompt_tokens": result.get("prompt_eval_count", 0),
-                        "completion_tokens": result.get("eval_count", 0),
-                        "total_tokens": result.get("prompt_eval_count", 0) + result.get("eval_count", 0)
-                    },
+                    content=choice["message"]["content"],
+                    usage=result.get("usage"),
                     model=result.get("model", self.config.model_name),
                     provider=self.config.provider,
-                    finish_reason=result.get("done_reason", "stop")
+                    finish_reason=choice.get("finish_reason")
                 )
     
     async def _stream_chat(self, client: httpx.AsyncClient, payload: Dict[str, Any]) -> AsyncGenerator[str, None]:
         """流式聊天"""
         async with client.stream(
             "POST",
-            f"{self.base_url}/api/chat",
+            f"{self.base_url}/chat/completions",
             headers=self.headers,
             json=payload
         ) as response:
             async for line in response.aiter_lines():
-                if line.strip():
+                if line.startswith("data: "):
+                    data = line[6:]
+                    if data == "[DONE]":
+                        break
                     try:
-                        chunk = json.loads(line)
-                        if "message" in chunk and "content" in chunk["message"]:
-                            content = chunk["message"]["content"]
-                            if content:
-                                yield content
-                        if chunk.get("done", False):
-                            break
+                        chunk = json.loads(data)
+                        if chunk["choices"][0]["delta"].get("content"):
+                            yield chunk["choices"][0]["delta"]["content"]
                     except json.JSONDecodeError:
                         continue
     
@@ -414,17 +409,17 @@ class OllamaProvider(BaseLLMProvider):
         """检查Ollama服务是否可用"""
         try:
             async with httpx.AsyncClient(timeout=10) as client:
-                # 检查Ollama服务状态
-                response = await client.get(f"{self.base_url}/api/tags")
-                if response.status_code != 200:
-                    return False
-                
-                # 检查模型是否存在
-                models = response.json().get("models", [])
-                model_names = [model["name"] for model in models]
-                
-                # 检查目标模型是否可用
-                return any(self.config.model_name in name for name in model_names)
+                # 使用简单的测试请求检查服务是否可用
+                response = await client.post(
+                    f"{self.base_url}/chat/completions",
+                    headers=self.headers,
+                    json={
+                        "model": self.config.model_name,
+                        "messages": [{"role": "user", "content": "test"}],
+                        "max_tokens": 1
+                    }
+                )
+                return response.status_code == 200
                 
         except Exception as e:
             self.logger.warning(f"Ollama service unavailable: {e}")
@@ -535,10 +530,14 @@ class CentralizedLLMService:
             elif provider == "ollama":
                 # Ollama不需要API key，使用本地服务
                 config = LLMProviderConfig.OLLAMA_CONFIG
+                # 使用环境变量覆盖默认配置
+                base_url = settings.ollama_base_url
+                model_name = settings.ollama_model
+                
                 llm_config = OllamaConfig(
-                    model_name=config["model_name"],
+                    model_name=model_name,
                     api_key="",  # Ollama不需要API key
-                    base_url=config["base_url"],
+                    base_url=base_url,
                     temperature=config["temperature"],
                     max_tokens=config["max_tokens"],
                     timeout=config["timeout"]
@@ -586,7 +585,8 @@ class CentralizedLLMService:
         except Exception as e:
             logger.error(f"LLM chat error with {self.llm_provider}: {e}")
             # Try to fallback to another provider
-            return await self._fallback_chat(messages, **kwargs)
+            raise e
+            # return await self._fallback_chat(messages, **kwargs)
     
     async def _fallback_chat(self, messages: List[LLMMessage], **kwargs) -> LLMResponse:
         """尝试使用其他可用的提供商"""

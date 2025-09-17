@@ -24,12 +24,16 @@ class Settings(BaseSettings):
     api_port: int = 8000
     
     # LLM设置 - 简化的配置
-    llm_provider: str = Field(default="deepseek", alias="LLM_PROVIDER")  # 可选: "deepseek", "openai", "alibaba", "ollama"
+    llm_provider: str = Field(default="ollama", alias="LLM_PROVIDER")  # 可选: "deepseek", "openai", "alibaba", "ollama"
     openai_api_key: Optional[str] = Field(default=None, alias="OPENAI_API_KEY")
     openai_model: Optional[str] = Field(default=None, alias="OPENAI_MODEL")
     deepseek_api_key: Optional[str] = Field(default=None, alias="DEEPSEEK_API_KEY")
     alibaba_api_key: Optional[str] = Field(default=None, alias="ALIBABA_API_KEY")
     embedding_api_key: Optional[str] = Field(default=None, alias="EMBEDDING_API_KEY")
+    
+    # Ollama配置
+    ollama_base_url: str = Field(default="http://158.193.6.221:8001/v1", alias="OLLAMA_BASE_URL")
+    ollama_model: str = Field(default="/data/model/models/openai-mirror/gpt-oss-20b", alias="OLLAMA_MODEL")
     
     # Minimum similarity score to consider a match
     similarity_threshold: Optional[float] = Field(default=0.3, alias="SIMILARITY_THRESHOLD")
