@@ -84,8 +84,11 @@ class TestResult:
         # Check SQL query if expected_sql is provided
         if self.expected_sql and hasattr(self.response, 'sql_query'):
             expected_sql_normalized = self._normalize_sql(self.expected_sql)
+            print(f"Expected SQL: {expected_sql_normalized}")
             actual_sql_normalized = self._normalize_sql(self.response.sql_query)
+            print(f"Actual SQL: {actual_sql_normalized}")
             self.sql_match = expected_sql_normalized in actual_sql_normalized
+            print(f"SQL Match: {self.sql_match}")
             logger.info(f"SQL Validation: {'✅ MATCH' if self.sql_match else '❌ MISMATCH'}")
             logger.info(f"Expected SQL: {self.expected_sql}")
             logger.info(f"Actual SQL: {self.response.sql_query}")
@@ -212,7 +215,7 @@ async def run_all_tests():
     failed = 0
     
     for i, test_case in enumerate(test_cases, 1):
-        if(i not in [13]):  # Test both SQL and keyword validation
+        if(i not in [4]):  # Test both SQL and keyword validation
             continue
         question = test_case.get("question", "")
         keywords = test_case.get("keywords", [])

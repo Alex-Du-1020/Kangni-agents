@@ -371,10 +371,10 @@ class KangniReActAgent:
         
         # 条件边：检查数据库结果
         def check_db_condition(state: AgentState) -> str:
-            has_valid_db_results = state.get("db_results_valid", False)
-            logger.info(f"Checking database results: {has_valid_db_results}")
+            needs_vector_search = state.get("needs_vector_search", False)
+            logger.info(f"Checking need vector search: {needs_vector_search}")
             
-            if has_valid_db_results:
+            if not needs_vector_search:
                 logger.info("Database has valid results, routing to generate_response")
                 return "generate_response"
             else:
@@ -473,6 +473,9 @@ class KangniReActAgent:
                 "找不到" not in content and
                 "没有找到" not in content and
                 "无法找到" not in content and
+                "没有相关" not in content and
+                "无相关信息" not in content and
+                "未包含所需信息" not in content and
                 len(content.strip()) > 50  # 确保有足够的内容
             )
             
@@ -587,7 +590,7 @@ class KangniReActAgent:
 1. 分析查询结果：
    - SQL查询是否成功生成？（是/否）
    - 数据库查询是否返回了有效数据？（是/否）
-   - 如果没有返回数据，是否应该使用向量搜索来找到正确的数据库值？（是/否）
+   - 如果SQL成功但返回0条记录，或者count(*)为0，说明用户输入可能不够准确，需要向量搜索来找到正确的数据库值（是/否）
 
 2. 如果数据库查询返回了有效数据，请直接格式化结果：
    - 用自然语言回答用户的问题
@@ -604,6 +607,7 @@ class KangniReActAgent:
 请按以下格式回答：
 SQL生成成功: [是/否]
 有效数据: [是/否]
+需要向量搜索: [如果SQL成功但无数据，或用户输入不够准确，则填"是"，否则填"否"]
 格式化结果: [如果有效数据，请直接给出格式化的回答，否则写"无"]"""
 
         # 转换消息格式为LLMMessage
@@ -620,6 +624,13 @@ SQL生成成功: [是/否]
         has_valid_sql = "sql生成成功: 是" in response_text or "sql生成成功：是" in response_text
         has_valid_data = "有效数据: 是" in response_text or "有效数据：是" in response_text
         needs_vector = "需要向量搜索: 是" in response_text or "需要向量搜索：是" in response_text
+        
+        # 额外检查：如果SQL成功但结果为空，也需要向量搜索
+        result_count = len(db_results) if db_results else 0
+        sql_successful_but_empty = has_valid_sql and result_count == 0
+        
+        # 确定是否需要向量搜索
+        needs_vector_search = not has_valid_data or sql_successful_but_empty or needs_vector
               
         # 提取格式化结果
         formatted_db_results = None
@@ -643,13 +654,13 @@ SQL生成成功: [是/否]
         if has_valid_data and db_results and not formatted_db_results:
             formatted_db_results = self._format_database_response(db_results, sql_query)
         
-        logger.info(f"LLM validation result: sql_valid={has_valid_sql}, data_valid={has_valid_data}, needs_vector={needs_vector}")
+        logger.info(f"LLM validation result: sql_valid={has_valid_sql}, data_valid={has_valid_data}, result_count={result_count}, needs_vector_search={needs_vector_search}")
         logger.info(f"Formatted results: {'Yes' if formatted_db_results else 'No'}")
                 
         return {
             **state,
             "db_results_valid": has_valid_data,
-            "needs_vector_search": not has_valid_data,  # Changed from needs_vector_search to match what we check
+            "needs_vector_search": needs_vector_search,
             "formatted_db_results": formatted_db_results
         }
     

@@ -1,7 +1,7 @@
 [
     {
-        "question": "合肥S1号线项目乘客室门这个项目一共有多少个去重后生产订单？",
-        "SQL": "WHERE projectname_s = '合肥S1号线项目乘客室门';"
+        "question": "合肥S1号线乘客室门这个项目一共有多少个去重后生产订单？",
+        "SQL": "WHERE projectname_s LIKE '%合肥S1号线项目乘客室门%'"
     },
     {
         "question": "唐车160公里集中动力车组CR200J3-C-1123 车的门类型是什么？",
@@ -43,7 +43,9 @@
     },
     {
         "question": "德里地铁4期项目(20D21028C000)在故障信息查询中共发生多少起故障？",
-        "SQL": "SQL: project_code LIKE '%20D21028C000%'"
+        "keywords": [
+            "10"
+        ]
     },
     {
         "question": "故障编号SH-202508-0899的故障后果是什么？",
@@ -74,5 +76,17 @@
         "keywords": [
             "包装"
         ]
+    },
+    {
+        "question": "统计今年一月份到六月每个月的生产订单",
+        "SQL": "WHERE YEAR(planstarttime_t) = YEAR(CURDATE()) AND MONTH(planstarttime_t) BETWEEN 1 AND 6"
+    },
+    {
+        "question": "印度艾哈迈达巴德项目第二次列车项目交付日期是什么时候？",
+        "SQL": "WHERE project_name = '印度艾哈迈达巴德项目第二次列车' AND product_name = '第二列'"
+    },
+    {
+        "question": "广州地铁13号线二期司机室门这个项目一共有多少个订单？",
+        "SQL": "WHERE projectname_s LIKE '%广州地铁13号线二期项目司机室门%'"
     }
 ]

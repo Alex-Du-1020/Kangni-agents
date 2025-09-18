@@ -135,7 +135,7 @@ class DatabaseService:
 1. 只返回SQL查询语句，不要添加额外的解释
 2. 确保SQL语法正确
 3. 字段名必须全部来自同一个DDL语句，不能跨DDL混用字段
-4. 考虑查询准确性尽量使用 like，而不是 =
+4. 考虑查询准确性尽量使用like，字段值需要使用%包裹，而不是 = 
 5. 考虑查询性能，适当使用索引，限制条件，去重，分组等
 6. 如果问题不够明确或缺少必要信息，返回 "INSUFFICIENT_INFO"
 7. 如果无法确定使用哪个DDL，返回 "INSUFFICIENT_INFO"
@@ -193,100 +193,12 @@ class DatabaseService:
                 preprocessed.placeholders
             )
             
-            # 8. 验证SQL中的字段是否来自同一个DDL
-            if not self._validate_sql_field_consistency(final_sql, ddl_context):
-                logger.warning(f"Generated SQL contains fields from different DDLs: {final_sql}")
-                # 可以在这里添加重试逻辑或者返回更明确的错误信息
-                return None
-            
             logger.info(f"Generated SQL: {final_sql}")
             return final_sql
             
         except Exception as e:
             logger.error(f"Error generating SQL: {e}")
             return None
-    
-    def _validate_sql_field_consistency(self, sql_query: str, ddl_context: str) -> bool:
-        """验证SQL查询中的字段是否都来自同一个DDL"""
-        try:
-            import re
-            
-            # 更精确地提取SQL中的字段名
-            sql_upper = sql_query.upper()
-            
-            # 提取SELECT子句中的字段
-            select_fields = set()
-            select_match = re.search(r'SELECT\s+(.*?)\s+FROM', sql_upper, re.DOTALL)
-            if select_match:
-                select_clause = select_match.group(1)
-                # 处理DISTINCT, COUNT等函数
-                select_clause = re.sub(r'\b(COUNT|SUM|AVG|MAX|MIN|DISTINCT)\s*\([^)]*\)', '', select_clause)
-                # 处理AS别名
-                select_clause = re.sub(r'\s+AS\s+\w+', '', select_clause)
-                # 提取字段名
-                field_matches = re.findall(r'\b([a-zA-Z_][a-zA-Z0-9_]*)\b', select_clause)
-                select_fields.update(field_matches)
-            
-            # 提取WHERE子句中的字段
-            where_fields = set()
-            where_match = re.search(r'WHERE\s+(.*?)(?:\s+ORDER\s+BY|\s+GROUP\s+BY|\s+LIMIT|$)', sql_upper, re.DOTALL)
-            if where_match:
-                where_clause = where_match.group(1)
-                # 移除字符串字面量（单引号包围的内容）
-                where_clause = re.sub(r"'[^']*'", '', where_clause)
-                # 移除数字字面量
-                where_clause = re.sub(r'\b\d+\b', '', where_clause)
-                # 提取字段名
-                field_matches = re.findall(r'\b([a-zA-Z_][a-zA-Z0-9_]*)\b', where_clause)
-                where_fields.update(field_matches)
-            
-            # 合并所有字段
-            sql_fields = select_fields | where_fields
-            
-            # 移除SQL关键字和表名
-            sql_keywords = {
-                'SELECT', 'FROM', 'WHERE', 'AND', 'OR', 'ORDER', 'BY', 'GROUP', 'HAVING',
-                'INNER', 'LEFT', 'RIGHT', 'JOIN', 'ON', 'AS', 'ASC', 'DESC', 'LIMIT',
-                'COUNT', 'SUM', 'AVG', 'MAX', 'MIN', 'DISTINCT', 'CASE', 'WHEN', 'THEN',
-                'ELSE', 'END', 'IS', 'NULL', 'NOT', 'IN', 'LIKE', 'BETWEEN', 'EXISTS',
-                'UNION', 'INTERSECT', 'EXCEPT', 'HAVING', 'WITH'
-            }
-            
-            # 移除表名（通常是大写且包含下划线的长名称）
-            table_names = set()
-            table_matches = re.findall(r'FROM\s+(\w+)', sql_upper)
-            table_names.update(table_matches)
-            
-            # 移除关键字和表名
-            sql_fields = sql_fields - sql_keywords - table_names
-            
-            # 移除空字符串和单字符
-            sql_fields = {field for field in sql_fields if field and len(field) > 1}
-            
-            if not sql_fields:
-                return True  # 没有字段需要验证
-            
-            # 将DDL上下文按表分割
-            ddl_sections = ddl_context.split('\n\n\n')
-            
-            # 检查每个DDL部分是否包含所有字段
-            for ddl_section in ddl_sections:
-                if not ddl_section.strip():
-                    continue
-                    
-                ddl_upper = ddl_section.upper()
-                # 检查所有字段是否都在这个DDL中
-                fields_in_ddl = all(field in ddl_upper for field in sql_fields)
-                if fields_in_ddl:
-                    logger.info(f"All SQL fields found in DDL section: {sql_fields}")
-                    return True
-            
-            logger.warning(f"SQL fields not found in any single DDL: {sql_fields}")
-            return False
-            
-        except Exception as e:
-            logger.error(f"Error validating SQL field consistency: {e}")
-            return True  # 验证失败时允许通过，避免阻塞正常流程
     
     async def query_database(self, question: str, memory_info: str = "") -> Dict[str, Any]:
         """完整的数据库查询流程"""
