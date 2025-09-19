@@ -80,13 +80,21 @@ class OpenAIProvider(BaseLLMProvider):
             for msg in messages
         ]
         
+        # Clean kwargs to remove invalid max_tokens
+        clean_kwargs = kwargs.copy()
+        if "max_tokens" in clean_kwargs:
+            max_tokens_value = clean_kwargs["max_tokens"]
+            if max_tokens_value is not None and (not isinstance(max_tokens_value, int) or max_tokens_value <= 0):
+                logger.warning(f"Invalid max_tokens value {max_tokens_value} in kwargs, removing it")
+                del clean_kwargs["max_tokens"]
+        
         payload = {
             "model": self.config.model_name,
             "messages": openai_messages,
             "temperature": self.config.temperature,
             "stream": stream,
             **self.config.extra_params,
-            **kwargs
+            **clean_kwargs
         }
         
         if self.config.max_tokens:
@@ -171,13 +179,21 @@ class DeepSeekProvider(BaseLLMProvider):
             for msg in messages
         ]
         
+        # Clean kwargs to remove invalid max_tokens
+        clean_kwargs = kwargs.copy()
+        if "max_tokens" in clean_kwargs:
+            max_tokens_value = clean_kwargs["max_tokens"]
+            if max_tokens_value is not None and (not isinstance(max_tokens_value, int) or max_tokens_value <= 0):
+                logger.warning(f"Invalid max_tokens value {max_tokens_value} in kwargs, removing it")
+                del clean_kwargs["max_tokens"]
+        
         payload = {
             "model": self.config.model_name,
             "messages": deepseek_messages,
             "temperature": self.config.temperature,
             "stream": stream,
             **self.config.extra_params,
-            **kwargs
+            **clean_kwargs
         }
         
         if self.config.max_tokens:
@@ -256,13 +272,21 @@ class AlibabaProvider(BaseLLMProvider):
             for msg in messages
         ]
         
+        # Clean kwargs to remove invalid max_tokens
+        clean_kwargs = kwargs.copy()
+        if "max_tokens" in clean_kwargs:
+            max_tokens_value = clean_kwargs["max_tokens"]
+            if max_tokens_value is not None and (not isinstance(max_tokens_value, int) or max_tokens_value <= 0):
+                logger.warning(f"Invalid max_tokens value {max_tokens_value} in kwargs, removing it")
+                del clean_kwargs["max_tokens"]
+        
         payload = {
             "model": self.config.model_name,
             "messages": alibaba_messages,
             "temperature": self.config.temperature,
             "stream": stream,
             **self.config.extra_params,
-            **kwargs
+            **clean_kwargs
         }
         
         async with httpx.AsyncClient(timeout=self.config.timeout) as client:
@@ -351,13 +375,21 @@ class OllamaProvider(BaseLLMProvider):
             for msg in messages
         ]
         
+        # Clean kwargs to remove invalid max_tokens
+        clean_kwargs = kwargs.copy()
+        if "max_tokens" in clean_kwargs:
+            max_tokens_value = clean_kwargs["max_tokens"]
+            if max_tokens_value is not None and (not isinstance(max_tokens_value, int) or max_tokens_value <= 0):
+                logger.warning(f"Invalid max_tokens value {max_tokens_value} in kwargs, removing it")
+                del clean_kwargs["max_tokens"]
+        
         payload = {
             "model": self.config.model_name,
             "messages": ollama_messages,
             "stream": stream,
             "temperature": self.config.temperature,
             **self.config.extra_params,
-            **kwargs
+            **clean_kwargs
         }
         
         if self.config.max_tokens:
