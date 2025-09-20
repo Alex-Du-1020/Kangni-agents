@@ -62,8 +62,8 @@ async def test_rag_search():
     print(f"\n2. Testing RAG search with query: {query}")
     
     try:
-        # 使用默认数据集进行搜索
-        results = await rag_service._search_rag(query, settings.ragflow_default_dataset_id, top_k=5)
+        # 使用第一个数据集进行搜索
+        results = await rag_service._search_rag(query, settings.ragflow_dataset_ids[0], top_k=5)
         assert len(results) == 5
         
         # 确保results不为None
@@ -166,7 +166,7 @@ async def test_rag_search():
         
         # 测试组合搜索和答案生成
         print(f"\n5. Testing combined search with answer generation...")
-        combined_result = await rag_service.search_rag_with_answer(query, settings.ragflow_default_dataset_id, top_k=3)
+        combined_result = await rag_service.search_rag_with_answer(query, settings.ragflow_dataset_ids[0], top_k=3)
         print(f"✅ 组合结果:")
         print(f"   答案长度: {len(combined_result['answer'])} 字符")
         print(f"   搜索结果数量: {combined_result['total_results']}")

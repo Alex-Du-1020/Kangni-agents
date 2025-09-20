@@ -207,7 +207,7 @@ async def run_all_tests():
     print(f"🚀 Running {len(test_cases)} test cases...")
     print(f"📊 Configuration:")
     print(f"   RAGFlow Server: {settings.ragflow_mcp_server_url}")
-    print(f"   Default Dataset: {settings.ragflow_default_dataset_id}")
+    print(f"   RAG Datasets: {settings.ragflow_dataset_ids}")
     print("=" * 80)
     
     results = []
@@ -215,8 +215,8 @@ async def run_all_tests():
     failed = 0
     
     for i, test_case in enumerate(test_cases, 1):
-        if(i not in [4]):  # Test both SQL and keyword validation
-            continue
+        # if(i not in [2]):  # Test both SQL and keyword validation
+        #     continue
         question = test_case.get("question", "")
         keywords = test_case.get("keywords", [])
         expected_sql = test_case.get("SQL", None)

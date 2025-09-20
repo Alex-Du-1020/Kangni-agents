@@ -10,6 +10,8 @@ graph TD;
 	check_rag_results(check_rag_results)
 	database_query(database_query)
 	validate_db_results(validate_db_results)
+	database_retry(database_retry)
+	validate_retry_results(validate_retry_results)
 	vector_search(vector_search)
 	validate_vector_results(validate_vector_results)
 	generate_response(generate_response)
@@ -19,11 +21,14 @@ graph TD;
 	check_rag_results -.-> database_query;
 	check_rag_results -.-> generate_response;
 	database_query --> validate_db_results;
+	database_retry --> validate_retry_results;
 	generate_response --> save_memory;
 	load_memory --> rag_search;
 	rag_search --> check_rag_results;
+	validate_db_results -.-> database_retry;
 	validate_db_results -.-> generate_response;
 	validate_db_results -.-> vector_search;
+	validate_retry_results --> generate_response;
 	validate_vector_results --> generate_response;
 	vector_search --> validate_vector_results;
 	save_memory --> __end__;

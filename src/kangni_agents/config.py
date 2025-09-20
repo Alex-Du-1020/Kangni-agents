@@ -5,7 +5,7 @@ from pydantic import Field
 class Settings(BaseSettings):
     # RAG设置
     ragflow_mcp_server_url: str = "http://158.58.50.45:9382/mcp"
-    ragflow_default_dataset_id: str = "f3073258886911f08bc30242c0a82006"
+    ragflow_dataset_ids: list[str] = ["f3073258886911f08bc30242c0a82006", "e015ebf8886911f0952f0242c0a82006"]
     
     # 数据库相关RAG数据集IDs
     db_ddl_dataset_id: str = "10123e2487f211f0aeb40242c0a80006"

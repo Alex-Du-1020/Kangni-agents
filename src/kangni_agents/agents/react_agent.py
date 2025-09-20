@@ -37,6 +37,8 @@ class AgentState(TypedDict):
     db_results_valid: bool
     needs_vector_search: bool
     formatted_db_results: Optional[str]
+    result_too_large: bool
+    retry_attempted: bool
     # Response fields
     final_answer: Optional[str]
     source_links: Optional[List[str]]
@@ -47,12 +49,10 @@ class AgentState(TypedDict):
     start_time: Optional[float]
 
 @tool
-async def rag_search_tool(query: str, memory_info: str = "", dataset_id: Optional[str] = None) -> Dict[str, Any]:
-    """搜索RAG文档库获取相关信息"""
-    if not dataset_id:
-        dataset_id = settings.ragflow_default_dataset_id
-    
-    result = await rag_service.search_rag_with_answer(query, dataset_id, memory_info)
+async def rag_search_tool(query: str, memory_info: str = "") -> Dict[str, Any]:
+    """搜索RAG文档库获取相关信息 - 支持多个数据集"""
+    # 直接使用RAG服务，它内部会处理多个数据集
+    result = await rag_service.search_rag_with_answer(query, memory_info, top_k=8)
     return result
 
 @tool 
@@ -334,6 +334,8 @@ class KangniReActAgent:
         workflow.add_node("check_rag_results", self.check_rag_results)
         workflow.add_node("database_query", self.execute_database_query)
         workflow.add_node("validate_db_results", self.validate_database_results)
+        workflow.add_node("database_retry", self.execute_database_retry)
+        workflow.add_node("validate_retry_results", self.validate_database_results)
         workflow.add_node("vector_search", self.execute_vector_search)
         workflow.add_node("validate_vector_results", self.validate_database_results)
         workflow.add_node("generate_response", self.generate_response)
@@ -372,11 +374,20 @@ class KangniReActAgent:
         # 条件边：检查数据库结果
         def check_db_condition(state: AgentState) -> str:
             needs_vector_search = state.get("needs_vector_search", False)
-            logger.info(f"Checking need vector search: {needs_vector_search}")
+            db_results = state.get("db_results", [])
+            result_too_large = state.get("result_too_large", False)
             
-            if not needs_vector_search:
+            logger.info(f"Checking database results - needs_vector: {needs_vector_search}, result_too_large: {result_too_large}")
+            
+            # 如果结果太大，先尝试重试优化SQL
+            if result_too_large and not state.get("retry_attempted", False):
+                logger.info("Result too large, routing to database_retry")
+                return "database_retry"
+            # 如果不需要向量搜索，直接生成响应
+            elif not needs_vector_search:
                 logger.info("Database has valid results, routing to generate_response")
                 return "generate_response"
+            # 否则进行向量搜索
             else:
                 logger.info("No valid database results, routing to vector_search")
                 return "vector_search"
@@ -386,10 +397,13 @@ class KangniReActAgent:
             check_db_condition,
             {
                 "generate_response": "generate_response",
+                "database_retry": "database_retry",
                 "vector_search": "vector_search"
             }
         )
         
+        workflow.add_edge("database_retry", "validate_retry_results")
+        workflow.add_edge("validate_retry_results", "generate_response")
         workflow.add_edge("vector_search", "validate_vector_results")
         workflow.add_edge("validate_vector_results", "generate_response")
         workflow.add_edge("generate_response", "save_memory")
@@ -551,6 +565,17 @@ class KangniReActAgent:
         db_success = state.get("db_success", False)
         query = state["query"]
         memory_info = state.get("memory_info", {})
+
+        # 检查结果大小是否过大（仅在初次验证时检查）
+        if not state.get("retry_attempted", False):
+            result_too_large = self._check_result_size(db_results)
+            if result_too_large:
+                logger.info("Result too large, routing to database_retry")
+                return {
+                    **state,
+                    "result_too_large": result_too_large,
+                    "retry_attempted": False,  # 标记为需要重试
+                }
             
         # 安全地序列化数据库结果，避免JSON转义问题
         def safe_serialize_results(results):
@@ -628,6 +653,7 @@ SQL生成成功: [是/否]
         # 额外检查：如果SQL成功但结果为空，也需要向量搜索
         result_count = len(db_results) if db_results else 0
         sql_successful_but_empty = has_valid_sql and result_count == 0
+
         
         # 确定是否需要向量搜索
         needs_vector_search = not has_valid_data or sql_successful_but_empty or needs_vector
@@ -654,15 +680,73 @@ SQL生成成功: [是/否]
         if has_valid_data and db_results and not formatted_db_results:
             formatted_db_results = self._format_database_response(db_results, sql_query)
         
-        logger.info(f"LLM validation result: sql_valid={has_valid_sql}, data_valid={has_valid_data}, result_count={result_count}, needs_vector_search={needs_vector_search}")
+        # 对于重试后的结果，不再检查大小，直接使用LLM判断
+        is_retry_validation = state.get("retry_attempted", False)
+        
+        logger.info(f"LLM validation result: sql_valid={has_valid_sql}, data_valid={has_valid_data}, result_count={result_count}, needs_vector_search={needs_vector_search}, is_retry={is_retry_validation}")
         logger.info(f"Formatted results: {'Yes' if formatted_db_results else 'No'}")
                 
         return {
             **state,
             "db_results_valid": has_valid_data,
             "needs_vector_search": needs_vector_search,
+            "result_too_large": False,  # 重试后不再标记为过大
+            "retry_attempted": is_retry_validation,  # 保持重试状态
             "formatted_db_results": formatted_db_results
         }
+    
+    async def execute_database_retry(self, state: AgentState) -> AgentState:
+        """执行数据库查询重试 - 优化SQL以减少结果大小"""
+        query = state["query"]
+        original_sql = state.get("sql_query")
+        memory_info = state.get("memory_info", "")
+        
+        logger.info(f"Executing database retry for large results: {query}")
+        
+        try:
+            # 使用LLM优化SQL
+            optimized_sql = await self._optimize_sql_for_large_results(original_sql, query, memory_info)
+            
+            # 使用优化后的SQL重新查询数据库
+            logger.info(f"Retrying with optimized SQL: {optimized_sql}")
+            db_results = await db_service.execute_sql_query(optimized_sql)
+            
+            if db_results is not None:
+                logger.info(f"Database retry successful, got {len(db_results)} results")
+                
+                # 格式化结果
+                formatted_content = self._format_database_response(db_results, optimized_sql)
+                
+                # 创建工具消息
+                tool_message = AIMessage(content=f"数据库重试结果（优化后）：\n{formatted_content}")
+                
+                return {
+                    **state,
+                    "db_results": db_results,
+                    "sql_query": optimized_sql,
+                    "db_success": True,
+                    "retry_attempted": True,
+                    "messages": [*state["messages"], tool_message]
+                }
+            else:
+                logger.warning("Database retry failed: No results returned")
+                error_message = AIMessage(content="数据库重试失败: 未返回结果")
+                return {
+                    **state,
+                    "db_success": False,
+                    "retry_attempted": True,
+                    "messages": [*state["messages"], error_message]
+                }
+                
+        except Exception as e:
+            logger.error(f"Database retry error: {e}")
+            error_message = AIMessage(content=f"数据库重试时发生错误: {str(e)}")
+            return {
+                **state,
+                "db_success": False,
+                "retry_attempted": True,
+                "messages": [*state["messages"], error_message]
+            }
     
     async def execute_vector_search(self, state: AgentState) -> AgentState:
         """执行向量搜索增强"""
@@ -779,6 +863,70 @@ SQL生成成功: [是/否]
                 answer_parts.append(f"... 还有 {result_count - display_count} 条记录")
         
         return "\n".join(answer_parts)
+    
+    def _check_result_size(self, db_results: List[Dict]) -> bool:
+        """检查数据库结果大小是否过大"""
+        if not db_results:
+            return False
+        
+        # 计算结果的字符长度
+        try:
+            # 使用自定义序列化器处理Decimal等特殊类型
+            def json_serializer(obj):
+                if hasattr(obj, 'isoformat'):  # datetime, date 对象
+                    return obj.isoformat()
+                elif hasattr(obj, '__str__'):  # Decimal等对象
+                    return str(obj)
+                else:
+                    return obj
+            
+            result_json = json.dumps(db_results, ensure_ascii=False, default=json_serializer)
+            result_length = len(result_json)
+            logger.info(f"Database result length: {result_length} characters")
+            return result_length > 50000  # 超过10000字符认为过大
+        except Exception as e:
+            logger.warning(f"Failed to calculate result size: {e}")
+            # 如果无法计算JSON长度，使用记录数量作为粗略估计
+            return len(db_results) > 5000
+    
+    async def _optimize_sql_for_large_results(self, original_sql: str, question: str, memory_info: str = "") -> str:
+        """使用LLM优化SQL查询以减少结果大小"""
+        optimization_prompt = f"""请优化以下SQL查询以减少结果大小。原始查询返回了太多数据，需要添加DISTINCT或GROUP BY来聚合结果。
+
+用户问题: {question}
+原始SQL: {original_sql}
+
+优化要求:
+1. 如果查询返回重复数据，添加DISTINCT
+2. 如果需要统计信息，使用GROUP BY和聚合函数(COUNT, SUM, AVG等)
+3. 保持查询的核心逻辑不变
+4. 优先使用聚合函数来提供统计信息而不是详细列表
+5. 如果可能，添加LIMIT子句限制结果数量
+
+请只返回优化后的SQL查询，不要包含其他解释。"""
+
+        llm_messages = [
+            LLMMessage(role="system", content="你是一个SQL优化专家，专门处理大数据量查询的优化。"),
+            LLMMessage(role="user", content=optimization_prompt)
+        ]
+        
+        try:
+            response = await llm_service.chat(llm_messages)
+            optimized_sql = response.content.strip()
+            
+            # 清理SQL，移除可能的markdown格式
+            if optimized_sql.startswith("```sql"):
+                optimized_sql = optimized_sql[6:]
+            if optimized_sql.endswith("```"):
+                optimized_sql = optimized_sql[:-3]
+            optimized_sql = optimized_sql.strip()
+            
+            logger.info(f"SQL optimized: {original_sql} -> {optimized_sql}")
+            return optimized_sql
+            
+        except Exception as e:
+            logger.error(f"Failed to optimize SQL: {e}")
+            return original_sql
     
     async def save_memory(self, state: AgentState) -> AgentState:
         """Save interaction to memory system"""
@@ -915,6 +1063,8 @@ SQL生成成功: [是/否]
                 "db_results_valid": False,
                 "needs_vector_search": False,
                 "formatted_db_results": None,
+                "result_too_large": False,
+                "retry_attempted": False,
                 # Response fields
                 "final_answer": None,
                 "source_links": None,

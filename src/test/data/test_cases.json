@@ -1,27 +1,33 @@
 [
     {
+        "id": 1,
         "question": "合肥S1号线乘客室门这个项目一共有多少个去重后生产订单？",
         "SQL": "WHERE projectname_s LIKE '%合肥S1号线项目乘客室门%'"
     },
     {
-        "question": "唐车160公里集中动力车组CR200J3-C-1123 车的门类型是什么？",
+        "id": 2,
+        "question": "列出唐车160公里集中动力车组的所有故障",
         "keywords": [
-            "塞拉门"
+            "塞拉门",
+            "辅助锁故障"
         ]
     },
     {
+        "id": 3,
         "question": "内解锁接地线线束短，无法安装到紧固螺钉位置是那个项目发生的？",
         "keywords": [
             "东莞1号线项目"
         ]
     },
     {
+        "id": 4,
         "question": "BOM中0128000064物料的供应商是谁？",
         "keywords": [
             "南京松凯机电科技有限公司"
         ]
     },
     {
+        "id": 5,
         "question": "101412549生产订单的操作人员是谁？",
         "keywords": [
             "张翔",
@@ -30,63 +36,88 @@
         ]
     },
     {
+        "id": 6,
         "question": "102293652订单的图号是多少？",
         "keywords": [
             "M201510395"
         ]
     },
     {
+        "id": 7,
         "question": "102256885订单BOM中0128000064物料的供应商是谁？",
         "keywords": [
             "南京松凯机电科技有限公司"
         ]
     },
     {
+        "id": 8,
         "question": "德里地铁4期项目(20D21028C000)在故障信息查询中共发生多少起故障？",
         "keywords": [
             "10"
         ]
     },
     {
+        "id": 9,
         "question": "故障编号SH-202508-0899的故障后果是什么？",
         "keywords": [
             "无影响"
         ]
     },
     {
+        "id": 10,
         "question": "NCR编号NCR-202508-1070的问题性质是什么？",
         "keywords": [
             "批量"
         ]
     },
     {
+        "id": 11,
         "question": "不合格单号2025050017是在那个项目阶段发生的问题？",
         "keywords": [
             "型式试验"
         ]
     },
     {
+        "id": 12,
         "question": "100030602订单BOM中0120010001物料的报检人是谁？",
         "keywords": [
             "张雪芹"
         ]
     },
     {
+        "id": 13,
         "question": "门板油漆损伤原因是什么？",
         "keywords": [
             "包装"
         ]
     },
     {
+        "id": 14,
         "question": "统计今年一月份到六月每个月的生产订单",
         "SQL": "WHERE YEAR(planstarttime_t) = YEAR(CURDATE()) AND MONTH(planstarttime_t) BETWEEN 1 AND 6"
     },
     {
+        "id": 15,
         "question": "印度艾哈迈达巴德项目第二次列车项目交付日期是什么时候？",
         "SQL": "WHERE project_name = '印度艾哈迈达巴德项目第二次列车' AND product_name = '第二列'"
     },
     {
+        "id": 16,
         "question": "广州地铁13号线二期司机室门这个项目一共有多少个订单？",
         "SQL": "WHERE projectname_s LIKE '%广州地铁13号线二期项目司机室门%'"
+    },
+    {
+        "id": 17,
+        "question": "西安机场线项目开关开裂的根因是?",
+        "keywords": [
+            "乐泰243"
+        ]
+    },
+    {
+        "id": 18,
+        "question": "102256885订单BOM中0120010068物料的需求数量是多少",
+        "keywords": [
+            "60"
+        ]
     }
 ]

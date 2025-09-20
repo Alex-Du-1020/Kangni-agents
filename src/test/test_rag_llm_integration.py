@@ -22,7 +22,7 @@ async def test_rag_llm_integration():
     
     # Test query
     query = "内解锁接地线线束短，无法安装到紧固螺钉位置是那个项目发生的？"
-    dataset_id = settings.ragflow_default_dataset_id
+    dataset_id = settings.ragflow_dataset_ids[0]
     
     try:
         # Test 1: Basic RAG search (original functionality)
@@ -68,7 +68,7 @@ async def test_rag_llm_fallback():
     print("=" * 60)
     
     query = "测试查询"
-    dataset_id = settings.ragflow_default_dataset_id
+    dataset_id = settings.ragflow_dataset_ids[0]
     
     try:
         # Test with empty search results

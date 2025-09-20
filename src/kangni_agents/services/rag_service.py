@@ -35,7 +35,7 @@ class RAGFlowService:
             logger.error(f"RAG service connection test failed: {e}")
             return False
     
-    async def _search_rag(self, query: str, dataset_id: str, top_k: int = 5) -> List[RAGSearchResult]:
+    async def _search_rag(self, query: str, dataset_ids: List[str], top_k: int = 5) -> List[RAGSearchResult]:
         """调用RAGFlow MCP服务进行文档搜索"""
         try:
             async def _do_search():
@@ -47,7 +47,7 @@ class RAGFlowService:
                         response = await session.call_tool(
                             name="ragflow_retrieval",
                             arguments={
-                                "dataset_ids": [dataset_id],
+                                "dataset_ids": dataset_ids,
                                 "question": query,
                                 "top_k": top_k
                             }
@@ -148,9 +148,9 @@ class RAGFlowService:
         
         # 并行搜索三个数据集
         tasks = [
-            ("ddl", self._search_rag(query, settings.db_ddl_dataset_id)),
-            ("query_sql", self._search_rag(query, settings.db_query_sql_dataset_id)),
-            ("description", self._search_rag(query, settings.db_description_dataset_id))
+            ("ddl", self._search_rag(query, [settings.db_ddl_dataset_id])),
+            ("query_sql", self._search_rag(query, [settings.db_query_sql_dataset_id])),
+            ("description", self._search_rag(query, [settings.db_description_dataset_id]))
         ]
         
         for name, task in tasks:
@@ -262,11 +262,11 @@ class RAGFlowService:
         
         return formatted_answer
     
-    async def search_rag_with_answer(self, query: str, dataset_id: str, memory_info: str = "", top_k: int = 5) -> Dict[str, Any]:
+    async def search_rag_with_answer(self, query: str, memory_info: str = "", top_k: int = 5) -> Dict[str, Any]:
         """搜索RAG并生成答案"""
         try:
             # 首先进行文档搜索
-            search_results = await self._search_rag(query, dataset_id, top_k)
+            search_results = await self._search_rag(query, settings.ragflow_dataset_ids, top_k)
             
             # 然后使用LLM生成答案
             answer = await self.generate_answer_with_llm(query, search_results, memory_info)
@@ -276,7 +276,7 @@ class RAGFlowService:
                     "content": "未找到相关文档信息",
                     "rag_results": [],
                     "query": query,
-                    "dataset_id": dataset_id,
+                    "dataset_ids": settings.ragflow_dataset_ids,
                     "total_results": 0
                 }
             
@@ -307,7 +307,7 @@ class RAGFlowService:
                 "content": answer,
                 "rag_results": referenced_docs,
                 "query": query,
-                "dataset_id": dataset_id,
+                "dataset_ids": settings.ragflow_dataset_ids,
                 "total_results": len(search_results)
             }
             

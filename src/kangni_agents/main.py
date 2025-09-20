@@ -197,7 +197,7 @@ def create_app() -> FastAPI:
         """获取配置信息（用于调试）"""
         return {
             "ragflow_server": settings.ragflow_mcp_server_url,
-            "default_dataset": settings.ragflow_default_dataset_id,
+            "rag_datasets": settings.ragflow_dataset_ids,
             "db_datasets": {
                 "ddl": settings.db_ddl_dataset_id,
                 "query_sql": settings.db_query_sql_dataset_id,
