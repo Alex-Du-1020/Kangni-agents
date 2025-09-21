@@ -22,12 +22,11 @@ services:
     command: ["postgres", "-c", "max_connections=200"]
 
   kangni-agents:
-    build: 
-      context: ..
-      dockerfile: Dockerfile
     container_name: kangni-agents
+    image: crpi-i9bomwox41wvx0ht.cn-hangzhou.personal.cr.aliyuncs.com/kangni_agents/kangni_agents:0.3.1
     ports:
       - "8000:8000"
+    env_file: .env
     environment:
       - PYTHONPATH=/app
       - ENVIRONMENT=production
@@ -40,14 +39,6 @@ services:
       - POSTGRES_PASSWORD=postgres
       - POSTGRES_DB=kangni_ai_chatbot
       - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/kangni_ai_chatbot
-      # LLM Configuration (set these in .env file)
-      - LLM_PROVIDER=deepseek
-      - LLM_API_KEY=${DEEPSEEK_API_KEY:-your_deepseek_api_key}
-      - LLM_BASE_URL=https://api.deepseek.com
-      - LLM_CHAT_MODEL=deepseek-chat
-      # RAG Configuration
-      - RAGFLOW_MCP_SERVER_URL=${RAGFLOW_MCP_SERVER_URL:-http://158.58.50.45:9382/mcp}
-      - RAGFLOW_DEFAULT_DATASET_ID=${RAGFLOW_DEFAULT_DATASET_ID:-f3073258886911f08bc30242c0a82006}
     depends_on:
       postgres:
         condition: service_healthy
