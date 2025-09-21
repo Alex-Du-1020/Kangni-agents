@@ -35,7 +35,7 @@ class RAGFlowService:
             logger.error(f"RAG service connection test failed: {e}")
             return False
     
-    async def _search_rag(self, query: str, dataset_ids: List[str], top_k: int = 5) -> List[RAGSearchResult]:
+    async def _search_rag(self, query: str, dataset_ids: List[str], top_k: int = 5, is_need_merge_same_doc: bool = False) -> List[RAGSearchResult]:
         """调用RAGFlow MCP服务进行文档搜索"""
         try:
             async def _do_search():
@@ -71,7 +71,7 @@ class RAGFlowService:
                                     # 处理chunks数组
                                     chunks = parsed_data['chunks']
                                     for i, chunk in enumerate(chunks):
-                                        if isinstance(chunk, dict) and i < 5:
+                                        if isinstance(chunk, dict) and i < top_k:
                                             if len(chunk) < 5000:
                                                 content.append(chunk)
                                             else:
@@ -133,6 +133,10 @@ class RAGFlowService:
                     search_results.append(result)
                     logger.debug(f"RAG result {i+1}: score={result.score}, content_preview={result.content[:100]}...")
             
+            # 如果需要合并同一文档的内容
+            if is_need_merge_same_doc:
+                search_results = self._merge_same_document_chunks(search_results)
+            
             logger.debug(f"RAG retrieve completed: {len(search_results)} results found for query: {query}")
             return search_results
         except asyncio.TimeoutError:
@@ -161,6 +165,78 @@ class RAGFlowService:
                 raise RuntimeError(f"Failed to search {name} dataset: {str(e)}")
         
         return results
+    
+    def _merge_same_document_chunks(self, search_results: List[RAGSearchResult]) -> List[RAGSearchResult]:
+        """合并同一文档的多个chunks"""
+        if not search_results:
+            return search_results
+        
+        # 按文档分组
+        document_groups = {}
+        for result in search_results:
+            if result.metadata and result.metadata.get('document_id'):
+                doc_id = result.metadata['document_id']
+                if doc_id not in document_groups:
+                    document_groups[doc_id] = []
+                document_groups[doc_id].append(result)
+            else:
+                # 如果没有document_id，保持原样
+                if 'unknown' not in document_groups:
+                    document_groups['unknown'] = []
+                document_groups['unknown'].append(result)
+        
+        # 合并每个文档组的内容
+        merged_results = []
+        for doc_id, chunks in document_groups.items():
+            if len(chunks) == 1:
+                # 只有一个chunk，直接添加
+                merged_results.append(chunks[0])
+            else:
+                # 多个chunks，合并内容
+                first_chunk = chunks[0]
+                
+                # 合并所有内容
+                combined_content = "\n\n".join([chunk.content for chunk in chunks])
+                
+                # 计算平均评分
+                avg_score = sum(chunk.score for chunk in chunks) / len(chunks)
+                
+                # 合并highlight信息
+                combined_highlight = " ".join([chunk.metadata.get('highlight', '') for chunk in chunks if chunk.metadata])
+                
+                # 合并positions信息
+                combined_positions = []
+                for chunk in chunks:
+                    if chunk.metadata and chunk.metadata.get('positions'):
+                        combined_positions.extend(chunk.metadata['positions'])
+                
+                # 计算平均相似度
+                avg_vector_similarity = sum(chunk.metadata.get('vector_similarity', 0.0) for chunk in chunks if chunk.metadata) / len(chunks)
+                avg_term_similarity = sum(chunk.metadata.get('term_similarity', 0.0) for chunk in chunks if chunk.metadata) / len(chunks)
+                
+                # 创建合并后的元数据
+                merged_metadata = first_chunk.metadata.copy() if first_chunk.metadata else {}
+                merged_metadata.update({
+                    'highlight': combined_highlight,
+                    'positions': combined_positions,
+                    'vector_similarity': avg_vector_similarity,
+                    'term_similarity': avg_term_similarity,
+                    'chunk_count': len(chunks),  # 添加chunk数量信息
+                    'merged_from_chunks': [chunk.metadata.get('id', '') for chunk in chunks if chunk.metadata and chunk.metadata.get('id')]
+                })
+                
+                # 创建合并后的结果
+                merged_result = RAGSearchResult(
+                    content=combined_content,
+                    score=avg_score,
+                    metadata=merged_metadata
+                )
+                merged_results.append(merged_result)
+                
+                logger.debug(f"Merged {len(chunks)} chunks from document {doc_id}: {first_chunk.metadata.get('document_name', 'Unknown')}")
+        
+        logger.info(f"Document merging completed: {len(search_results)} chunks -> {len(merged_results)} documents")
+        return merged_results
     
     async def generate_answer_with_llm(self, query: str, search_results: List[RAGSearchResult], memory_info: str = "") -> str:
         """使用LLM基于检索到的文档生成答案"""
@@ -200,7 +276,7 @@ class RAGFlowService:
 在有帮助时引用相关部分
 如果可用，标注来源文档/部分
 使用诸如"根据文档1..."或"基于知识库2..."等短语告诉我们你的来源。
-如果结果来自多个文档，就列出来所有结果的来源。
+如果结果来自多个文档，就列出来所有结果的来源及源文件。
 例如：
 门板油漆损伤的原因是：
 根据文档1，包装箱支撑防护不足
@@ -265,8 +341,8 @@ class RAGFlowService:
     async def search_rag_with_answer(self, query: str, memory_info: str = "", top_k: int = 5) -> Dict[str, Any]:
         """搜索RAG并生成答案"""
         try:
-            # 首先进行文档搜索
-            search_results = await self._search_rag(query, settings.ragflow_dataset_ids, top_k)
+            # 首先进行文档搜索，启用文档合并
+            search_results = await self._search_rag(query, settings.ragflow_dataset_ids, top_k, is_need_merge_same_doc=True)
             
             # 然后使用LLM生成答案
             answer = await self.generate_answer_with_llm(query, search_results, memory_info)
@@ -301,6 +377,7 @@ class RAGFlowService:
             # 只包含被引用的文档
             for doc_index in sorted(all_refs):
                 if doc_index < len(search_results):
+
                     referenced_docs.append(search_results[doc_index])
             
             return {
