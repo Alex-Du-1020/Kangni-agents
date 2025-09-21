@@ -6,6 +6,7 @@ import logging
 import sys
 import asyncio
 import os
+from logging.handlers import RotatingFileHandler
 from fastapi.openapi.docs import get_swagger_ui_html
 from fastapi.staticfiles import StaticFiles
 
@@ -18,16 +19,36 @@ from .api.embedding_routes import router as embedding_router
 from .services.rag_service import rag_service
 
 # 配置日志
+log_dir = os.getenv("LOG_DIR", "/app/logs")
+
+# 尝试创建日志目录，如果失败则使用当前目录
+try:
+    os.makedirs(log_dir, exist_ok=True)
+except (OSError, PermissionError):
+    # 如果无法创建指定目录，使用当前目录下的logs文件夹
+    log_dir = os.path.join(os.getcwd(), "logs")
+    os.makedirs(log_dir, exist_ok=True)
+
+# 创建旋转文件处理器，每个文件最大10MB，保留5个备份文件
+file_handler = RotatingFileHandler(
+    os.path.join(log_dir, "kangni_agents.log"),
+    maxBytes=10*1024*1024,  # 10MB
+    backupCount=5
+)
+
 logging.basicConfig(
     level=getattr(logging, settings.get_log_level()),
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     handlers=[
         logging.StreamHandler(sys.stdout),
-        logging.FileHandler("kangni_agents.log")
+        file_handler
     ]
 )
 
 logger = logging.getLogger(__name__)
+
+# 记录日志配置信息
+logger.info(f"Logging configured - Level: {settings.get_log_level()}, Directory: {log_dir}")
 
 async def check_service_availability():
     """检查所有必需服务的可用性"""

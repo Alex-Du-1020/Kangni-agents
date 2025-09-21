@@ -31,6 +31,7 @@ services:
       - PYTHONPATH=/app
       - ENVIRONMENT=production
       - LOG_LEVEL=INFO
+      - LOG_DIR=/app/logs
       # Database Configuration
       - DB_TYPE=postgresql
       - POSTGRES_HOST=postgres
