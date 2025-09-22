@@ -238,7 +238,7 @@ class RAGFlowService:
         logger.info(f"Document merging completed: {len(search_results)} chunks -> {len(merged_results)} documents")
         return merged_results
     
-    async def generate_answer_with_llm(self, query: str, search_results: List[RAGSearchResult], memory_info: str = "") -> str:
+    async def generate_answer_with_llm(self, query: str, search_results: List[RAGSearchResult]) -> str:
         """使用LLM基于检索到的文档生成答案"""
         try:
             # 构建检索到的内容
@@ -254,12 +254,6 @@ class RAGFlowService:
             prompt = f"""角色
 您是文档质量检查代理，一位专门的知识库助手，负责严格基于关联的文档存储库提供准确答案。
 
-第一步需要理解用户的问题，根据下面的步骤理解用户的问题。
-1. 先检查用户问题是否需要历史记忆来回答  
-2. 如果需要，找到与问题最相关的记忆并引用  
-3. 再根据当前输入给出最终答案
-
-用户对话历史：{memory_info}
 用户问题: {query}
 
 知识库搜索答案： {retrieval_content}
@@ -338,14 +332,14 @@ class RAGFlowService:
         
         return formatted_answer
     
-    async def search_rag_with_answer(self, query: str, memory_info: str = "", top_k: int = 5) -> Dict[str, Any]:
+    async def search_rag_with_answer(self, query: str, top_k: int = 5) -> Dict[str, Any]:
         """搜索RAG并生成答案"""
         try:
             # 首先进行文档搜索，启用文档合并
             search_results = await self._search_rag(query, settings.ragflow_dataset_ids, top_k, is_need_merge_same_doc=True)
             
             # 然后使用LLM生成答案
-            answer = await self.generate_answer_with_llm(query, search_results, memory_info)
+            answer = await self.generate_answer_with_llm(query, search_results)
 
             if "文档未涵盖" in answer or "此信息在知识库中不可用" in answer:
                 return {

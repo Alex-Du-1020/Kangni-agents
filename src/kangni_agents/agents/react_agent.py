@@ -25,6 +25,8 @@ logger = logging.getLogger(__name__)
 class AgentState(TypedDict):
     messages: Annotated[List[BaseMessage], add_messages]
     query: str
+    original_query: Optional[str]  # Store original question for history
+    rewritten_query: Optional[str]  # Store memory-enhanced question
     intent: Optional[QueryType]
     # RAG-related fields
     rag_results: Optional[List[RAGSearchResult]]
@@ -49,17 +51,17 @@ class AgentState(TypedDict):
     start_time: Optional[float]
 
 @tool
-async def rag_search_tool(query: str, memory_info: str = "") -> Dict[str, Any]:
+async def rag_search_tool(query: str) -> Dict[str, Any]:
     """搜索RAG文档库获取相关信息 - 支持多个数据集"""
     # 直接使用RAG服务，它内部会处理多个数据集
-    result = await rag_service.search_rag_with_answer(query, memory_info, top_k=8)
+    result = await rag_service.search_rag_with_answer(query, top_k=8)
     return result
 
 @tool 
-async def database_query_tool(question: str, memory_info: str = "",) -> Dict[str, Any]:
+async def database_query_tool(question: str) -> Dict[str, Any]:
     """查询数据库获取统计信息"""
     # 直接执行数据库查询
-    result = await db_service.query_database(question, memory_info)
+    result = await db_service.query_database(question)
     
     # 返回格式化结果
     if result.get("success"):
@@ -74,7 +76,7 @@ async def database_query_tool(question: str, memory_info: str = "",) -> Dict[str
         }
 
 @tool
-async def vector_database_query_tool(question: str, failed_sql: str = None, memory_info: str = "") -> Dict[str, Any]:
+async def vector_database_query_tool(question: str, failed_sql: str = None) -> Dict[str, Any]:
     """使用向量搜索增强数据库查询，找到实际存在的值并重新生成SQL"""
     import yaml
     from pathlib import Path
@@ -178,7 +180,7 @@ async def vector_database_query_tool(question: str, failed_sql: str = None, memo
         
         # Generate new SQL with enhanced context
         logger.info("Generating new SQL with vector search suggestions")
-        enhanced_result = await db_service.query_database(enhanced_question, memory_info)
+        enhanced_result = await db_service.query_database(enhanced_question)
         
         if enhanced_result.get("success"):
             logger.info(f"Vector-enhanced query successful, got {len(enhanced_result.get('results', []))} results")
@@ -325,11 +327,12 @@ class KangniReActAgent:
             print(f"❌ Could not visualize workflow: {e}")
     
     def _build_workflow(self) -> StateGraph:
-        """构建LangGraph工作流 - 新流程：1.加载记忆 2.RAG搜索 3.数据库查询 4.向量搜索 5.生成响应"""
+        """构建LangGraph工作流 - 新流程：1.加载记忆 2.改写问题 3.RAG搜索 4.数据库查询 5.向量搜索 6.生成响应"""
         workflow = StateGraph(AgentState)
         
         # 添加节点
         workflow.add_node("load_memory", self.load_memory_info)
+        workflow.add_node("rewrite_question", self.rewrite_question_with_memory)
         workflow.add_node("rag_search", self.execute_rag_search)
         workflow.add_node("check_rag_results", self.check_rag_results)
         workflow.add_node("database_query", self.execute_database_query)
@@ -345,7 +348,8 @@ class KangniReActAgent:
         workflow.set_entry_point("load_memory")
         
         # 添加边
-        workflow.add_edge("load_memory", "rag_search")
+        workflow.add_edge("load_memory", "rewrite_question")
+        workflow.add_edge("rewrite_question", "rag_search")
         workflow.add_edge("rag_search", "check_rag_results")
         
         # 条件边：检查RAG结果
@@ -452,7 +456,7 @@ class KangniReActAgent:
                     short_term = memory_context.get("short_term_memories", [])
                     if short_term:
                         memory_info += "\n会话上下文:\n"
-                        for mem in short_term[:3]:
+                        for mem in short_term:
                             memory_info += f"- {mem['content']}...\n"
 
                 logger.info(f"Loaded memory context with {len(memory_context.get('short_term_memories', []))} short-term and {len(memory_context.get('long_term_memories', []))} long-term memories")
@@ -465,15 +469,92 @@ class KangniReActAgent:
             "memory_info": memory_info
         }
     
+    async def rewrite_question_with_memory(self, state: AgentState) -> AgentState:
+        """Rewrite question based on memory context to improve search accuracy"""
+        original_query = state["query"]
+        memory_info = state.get("memory_info", "")
+        
+        logger.info(f"Rewriting question with memory context: {original_query}")
+        
+        # If no memory context available, use original question
+        if not memory_info or memory_info.strip() == "":
+            logger.info("No memory context available, using original question")
+            return {
+                **state,
+                "original_query": original_query,
+                "rewritten_query": original_query
+            }
+        
+        try:
+            # Use LLM to rewrite question based on memory context
+            rewrite_prompt = f"""请根据以下记忆上下文，将用户的问题改写得更具体，以便更好地搜索相关文档。
+
+原始问题: {original_query}
+
+记忆上下文:
+{memory_info}
+
+需要理解用户的问题，根据下面的步骤理解用户的问题。
+1. 先检查用户原始问题是否需要历史记忆来回答  
+2. 如果需要，找到与问题最相关的记忆并引用  
+3. 再根据当前输入给出重写后的问题
+
+改写要求:
+1. 保持原始问题的核心意图
+2. 结合记忆上下文中的相关信息，使问题更具体
+3. 如果记忆上下文包含相关的历史对话或信息，请将其融入到问题中
+4. 改写后的问题应该更容易匹配到相关的文档
+5. 保持问题的自然性和可读性
+
+请只返回改写后的问题，不要包含其他解释。"""
+
+            llm_messages = [
+                LLMMessage(role="system", content="你是一个问题改写专家，专门根据记忆上下文优化问题以提高搜索准确性。"),
+                LLMMessage(role="user", content=rewrite_prompt)
+            ]
+            
+            response = await llm_service.chat(llm_messages)
+            rewritten_query = response.content.strip()
+            
+            # 清理可能的markdown格式
+            if rewritten_query.startswith("```"):
+                rewritten_query = rewritten_query.split("\n", 1)[1] if "\n" in rewritten_query else rewritten_query[3:]
+            if rewritten_query.endswith("```"):
+                rewritten_query = rewritten_query.rsplit("\n", 1)[0] if "\n" in rewritten_query else rewritten_query[:-3]
+            
+            rewritten_query = rewritten_query.strip()
+            
+            # 如果改写失败或结果为空，使用原始问题
+            if not rewritten_query or rewritten_query == "":
+                logger.warning("Question rewriting failed or returned empty, using original question")
+                rewritten_query = original_query
+            
+            logger.info(f"Question rewritten: '{original_query}' -> '{rewritten_query}'")
+            
+            return {
+                **state,
+                "original_query": original_query,
+                "rewritten_query": rewritten_query
+            }
+            
+        except Exception as e:
+            logger.error(f"Failed to rewrite question: {e}")
+            # Fallback to original question
+            return {
+                **state,
+                "original_query": original_query,
+                "rewritten_query": original_query
+            }
+    
     async def execute_rag_search(self, state: AgentState) -> AgentState:
         """执行RAG搜索"""
-        query = state["query"]
-        memory_info = state.get("memory_info", "")
+        # Use rewritten query if available, otherwise fallback to original
+        query = state.get("rewritten_query") or state["query"]
         
         logger.info(f"Executing RAG search for query: {query}")
         
         try:
-            result = await rag_search_tool.ainvoke({"query": query, "memory_info": memory_info})
+            result = await rag_search_tool.ainvoke({"query": query})
             
             # 存储RAG结果
             rag_results = result.get("rag_results", [])
@@ -522,13 +603,13 @@ class KangniReActAgent:
     
     async def execute_database_query(self, state: AgentState) -> AgentState:
         """执行数据库查询"""
-        query = state["query"]
-        memory_info = state.get("memory_info", "")
+        # Use rewritten query if available, otherwise fallback to original
+        query = state.get("rewritten_query") or state["query"]
         
         logger.info(f"Executing database query for: {query}")
         
         try:
-            result = await database_query_tool.ainvoke({"question": query, "memory_info": memory_info})
+            result = await database_query_tool.ainvoke({"question": query})
             
             # 存储数据库结果
             db_results = result.get("results", [])
@@ -562,9 +643,7 @@ class KangniReActAgent:
 
         db_results = state.get("db_results", [])
         sql_query = state.get("sql_query")
-        db_success = state.get("db_success", False)
-        query = state["query"]
-        memory_info = state.get("memory_info", {})
+        query = state.get("rewritten_query") or state["query"]
 
         # 检查结果大小是否过大（仅在初次验证时检查）
         if not state.get("retry_attempted", False):
@@ -577,13 +656,19 @@ class KangniReActAgent:
                     "retry_attempted": False,  # 标记为需要重试
                 }
             
-        # 安全地序列化数据库结果，避免JSON转义问题
+        # 安全地序列化数据库结果，避免JSON转义问题（支持 Decimal / datetime / date 等）
         def safe_serialize_results(results):
             if not results:
                 return "空结果"
             try:
-                # 使用json.dumps确保正确的JSON格式
-                json_str = json.dumps(results, ensure_ascii=False, indent=2)
+                def default_serializer(obj):
+                    # datetime/date 对象
+                    if hasattr(obj, "isoformat"):
+                        return obj.isoformat()
+                    # 其他如 Decimal 等对象
+                    return str(obj)
+                # 使用json.dumps确保正确的JSON格式，并处理特殊类型
+                json_str = json.dumps(results, ensure_ascii=False, indent=2, default=default_serializer)
                 return json_str
             except (TypeError, ValueError) as e:
                 # 如果JSON序列化失败，使用简单的字符串表示
@@ -598,12 +683,6 @@ class KangniReActAgent:
         # 构建让LLM判断和格式化的提示
         validation_prompt = f"""请分析以下工具执行结果，判断查询是否成功。如果查询结果成功，直接格式化结果。
 
-第一步需要理解用户的问题，根据下面的步骤理解用户的问题。
-1. 先检查用户问题是否需要历史记忆来回答  
-2. 如果需要，找到与问题最相关的记忆并引用  
-3. 再根据当前输入给出最终答案
-
-用户对话历史：{memory_info}
 用户问题: {query}
 
 生成的SQL: {sql_query if sql_query else "无"}
@@ -697,15 +776,15 @@ SQL生成成功: [是/否]
     
     async def execute_database_retry(self, state: AgentState) -> AgentState:
         """执行数据库查询重试 - 优化SQL以减少结果大小"""
-        query = state["query"]
+        # Use rewritten query if available, otherwise fallback to original
+        query = state.get("rewritten_query") or state["query"]
         original_sql = state.get("sql_query")
-        memory_info = state.get("memory_info", "")
         
         logger.info(f"Executing database retry for large results: {query}")
         
         try:
             # 使用LLM优化SQL
-            optimized_sql = await self._optimize_sql_for_large_results(original_sql, query, memory_info)
+            optimized_sql = await self._optimize_sql_for_large_results(original_sql, query)
             
             # 使用优化后的SQL重新查询数据库
             logger.info(f"Retrying with optimized SQL: {optimized_sql}")
@@ -750,17 +829,16 @@ SQL生成成功: [是/否]
     
     async def execute_vector_search(self, state: AgentState) -> AgentState:
         """执行向量搜索增强"""
-        query = state["query"]
+        # Use rewritten query if available, otherwise fallback to original
+        query = state.get("rewritten_query") or state["query"]
         failed_sql = state.get("sql_query")
-        memory_info = state.get("memory_info", "")
         
         logger.info(f"Executing vector search enhancement for: {query}")
         
         try:
             result = await vector_database_query_tool.ainvoke({
                 "question": query,
-                "failed_sql": failed_sql or "",
-                "memory_info": memory_info
+                "failed_sql": failed_sql or ""
             })
             
             # 使用数据库状态字段存储向量搜索结果
@@ -795,8 +873,9 @@ SQL生成成功: [是/否]
         rag_has_results = state.get("rag_has_results", False)
         db_results_valid = state.get("db_results_valid", False)
         formatted_db_results = state.get("formatted_db_results")
+        original_query = state.get("original_query", state.get("query", ""))
         
-        logger.info(f"Generating response - RAG: {rag_has_results}, DB: {db_results_valid}")
+        logger.info(f"Generating response for original query '{original_query}' - RAG: {rag_has_results}, DB: {db_results_valid}")
         
         # 1. 如果RAG有结果，直接返回RAG答案
         if rag_has_results:
@@ -889,7 +968,7 @@ SQL生成成功: [是/否]
             # 如果无法计算JSON长度，使用记录数量作为粗略估计
             return len(db_results) > 5000
     
-    async def _optimize_sql_for_large_results(self, original_sql: str, question: str, memory_info: str = "") -> str:
+    async def _optimize_sql_for_large_results(self, original_sql: str, question: str) -> str:
         """使用LLM优化SQL查询以减少结果大小"""
         optimization_prompt = f"""请优化以下SQL查询以减少结果大小。原始查询返回了太多数据，需要添加DISTINCT或GROUP BY来聚合结果。
 
@@ -976,8 +1055,8 @@ SQL生成成功: [是/否]
             int: The query history ID if successful, None if failed
         """
         try:
-            # Extract data from agent state
-            query = state.get("query", "")
+            # Extract data from agent state - use original query for history
+            query = state.get("original_query") or state.get("query", "")
             user_email = state.get("user_email")
             session_id = state.get("session_id", "default")
             answer = state.get("final_answer", "")
@@ -1051,6 +1130,8 @@ SQL生成成功: [是/否]
             initial_state = {
                 "messages": [HumanMessage(content=question)],
                 "query": question,
+                "original_query": question,  # Store original question for history
+                "rewritten_query": None,  # Will be set by rewrite_question_with_memory
                 "intent": None,
                 # RAG-related fields
                 "rag_results": None,
@@ -1078,7 +1159,7 @@ SQL生成成功: [是/否]
             # 运行工作流
             final_state = await self.workflow.ainvoke(
                 initial_state,
-                config=RunnableConfig(recursion_limit=10)
+                config=RunnableConfig(recursion_limit=20)
             )
             
             # 确保有有效的答案

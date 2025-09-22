@@ -93,8 +93,7 @@ class DatabaseService:
             raise RuntimeError(f"Database service error: {str(e)}")
     
     async def generate_sql_from_context(self, question: str, 
-        context_data: Dict[str, List[RAGSearchResult]], 
-        memory_info : str = ""
+        context_data: Dict[str, List[RAGSearchResult]]
         ) -> Optional[str]:
 
         """基于RAG搜索结果生成SQL查询"""
@@ -114,13 +113,6 @@ class DatabaseService:
             
             # 3. 构建基础系统提示
             base_system_prompt = f"""你是一个专业的SQL生成助手。
-
-第一步需要理解用户的问题，根据下面的步骤理解用户的问题。
-1. 先检查用户问题是否需要历史记忆来回答  
-2. 如果需要，找到与问题最相关的记忆并引用  
-3. 再根据当前输入给出最终答案
-
-用户对话历史：{memory_info}
             
 基于提供的数据库结构、查询示例和描述信息，为用户问题生成准确的SQL查询。
 
@@ -156,7 +148,6 @@ class DatabaseService:
             # 4. 使用预处理器增强提示词
             enhanced_system_prompt = query_preprocessor.build_enhanced_prompt(
                 base_system_prompt.format(
-                    memory_info=memory_info,
                     ddl_context=ddl_context,
                     query_examples=query_examples,
                     db_description=db_description
@@ -200,7 +191,7 @@ class DatabaseService:
             logger.error(f"Error generating SQL: {e}")
             return None
     
-    async def query_database(self, question: str, memory_info: str = "") -> Dict[str, Any]:
+    async def query_database(self, question: str) -> Dict[str, Any]:
         """完整的数据库查询流程"""
         try:
             
@@ -208,7 +199,7 @@ class DatabaseService:
             context_data = await rag_service.search_db_context(question)
             
             # 2. 生成SQL查询
-            sql_query = await self.generate_sql_from_context(question, context_data, memory_info)
+            sql_query = await self.generate_sql_from_context(question, context_data)
             
             if not sql_query:
                 return {

@@ -137,7 +137,7 @@ class TestResult:
             "response": str(self.response) if self.response else None
         }
 
-async def run_single_test(question: str, keywords: List[str] = None, expected_sql: str = None) -> TestResult:
+async def run_single_test(question: str, keywords: List[str] = None, expected_sql: str = None, id: int = None) -> TestResult:
     """运行单个测试用例"""
     result = TestResult(question, keywords, expected_sql)
     
@@ -145,19 +145,11 @@ async def run_single_test(question: str, keywords: List[str] = None, expected_sq
         logger.info(f"Testing: {question[:50]}...")
         start_time = time.time()
         
-        # Create query with required user_email and session_id
-        query = UserQuery(
-            question=question,
-            user_email="test@example.com",  # Add required user_email for testing
-            session_id="test-session-001"   # Add session_id for testing
-        )
-        
         # Execute query
         response = await kangni_agent.query(
             user_email="test@example.com",  # Add required user_email for testing
-            session_id="test-session-001",   # Add session_id for testing
-            question=query.question,
-            context=query.context
+            session_id="test-session-" + str(id),   # Add session_id for testing
+            question=question
         )
         
         result.duration = time.time() - start_time
@@ -215,7 +207,7 @@ async def run_all_tests():
     failed = 0
     
     for i, test_case in enumerate(test_cases, 1):
-        # if(i not in [19]):  # Test both SQL and keyword validation
+        # if(i not in [18]):  # Test both SQL and keyword validation
         #     continue
         question = test_case.get("question", "")
         keywords = test_case.get("keywords", [])
@@ -227,7 +219,7 @@ async def run_all_tests():
         if expected_sql:
             print(f"Expected SQL: {expected_sql}")
         
-        result = await run_single_test(question, keywords, expected_sql)
+        result = await run_single_test(question, keywords, expected_sql, i)
         results.append(result)
         
         if result.success:
