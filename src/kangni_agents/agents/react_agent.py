@@ -49,6 +49,7 @@ class AgentState(TypedDict):
     user_email: Optional[str]
     session_id: Optional[str]
     start_time: Optional[float]
+    query_history_id: Optional[int]
 
 @tool
 async def rag_search_tool(query: str) -> Dict[str, Any]:
@@ -1066,6 +1067,11 @@ SQL生成成功: [是/否]
         
         try:
             query_history_id = await self._save_query_history(state)
+            
+            # Store the history ID in the state for the query method to use
+            if query_history_id:
+                state["query_history_id"] = query_history_id
+            
             # Extract and store memories from this interaction
             if query_history_id and final_answer:
                 memory_ids = await memory_service.extract_and_store_memories(
@@ -1200,7 +1206,8 @@ SQL生成成功: [是/否]
                 "memory_info": None,
                 "user_email": user_email,
                 "session_id": session_id,
-                "start_time": time.time()
+                "start_time": time.time(),
+                "query_history_id": None
             }
             
             # 运行工作流
@@ -1240,6 +1247,10 @@ SQL生成成功: [是/否]
                 reasoning=None,  # 简化响应，不再包含reasoning
                 confidence=0.8
             )
+            
+            # 添加历史ID到响应中
+            if final_state.get("query_history_id"):
+                response.history_id = final_state["query_history_id"]
             
             # 添加SQL查询信息
             if final_state.get("sql_query"):

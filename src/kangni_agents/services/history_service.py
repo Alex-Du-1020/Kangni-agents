@@ -428,6 +428,57 @@ class HistoryService:
             logger.error(f"Failed to get query comments: {e}")
             raise
     
+    async def get_history_by_id(
+        self,
+        history_id: int
+    ) -> Optional[Dict[str, Any]]:
+        """
+        Get a specific query history record by ID
+        
+        Args:
+            history_id: The ID of the history record to retrieve
+        
+        Returns:
+            Dictionary containing the history record, or None if not found
+        """
+        try:
+            with self.db_config.session_scope() as session:
+                result = session.query(QueryHistory).filter(
+                    QueryHistory.id == history_id
+                ).first()
+                
+                if not result:
+                    logger.warning(f"History record with ID {history_id} not found")
+                    return None
+                
+                # Convert to dictionary
+                history_dict = {
+                    "id": result.id,
+                    "session_id": result.session_id,
+                    "user_email": result.user_email,
+                    "question": result.question,
+                    "rewritten_question": result.rewritten_question,
+                    "answer": result.answer,
+                    "sql_query": result.sql_query,
+                    "sources": result.sources,
+                    "query_type": result.query_type,
+                    "success": result.success,
+                    "error_message": result.error_message,
+                    "created_at": result.created_at.isoformat() if result.created_at else None,
+                    "processing_time_ms": result.processing_time_ms,
+                    "llm_provider": result.llm_provider,
+                    "model_name": result.model_name,
+                    "memory_summary": result.memory_summary,
+                    "context_used": result.context_used,
+                    "importance_score": result.importance_score
+                }
+                
+                logger.info(f"Retrieved history record {history_id}")
+                return history_dict
+        except Exception as e:
+            logger.error(f"Failed to get history by ID {history_id}: {e}")
+            raise
+
     async def get_recent_queries(
         self,
         hours: int = 24,

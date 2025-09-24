@@ -3,8 +3,10 @@ from typing import List, Optional, Dict, Any
 from enum import Enum
 
 class QueryType(str, Enum):
+    RAG = "rag"
     DATABASE = "database" 
     HYBRID = "hybrid"
+    LLM_ONLY = "llm_only"
 
 class UserQuery(BaseModel):
     question: str
@@ -45,6 +47,7 @@ class QueryResponse(BaseModel):
     answer: str
     query_type: QueryType
     session_id: Optional[str] = None  # Return the session ID used for this query
+    history_id: Optional[int] = None  # Return the history ID for this query
     sources: Optional[List[RAGSearchResult]] = None
     sql_query: Optional[str] = None
     confidence: Optional[float] = None
