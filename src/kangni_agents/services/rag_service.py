@@ -35,7 +35,7 @@ class RAGFlowService:
             logger.error(f"RAG service connection test failed: {e}")
             return False
     
-    async def _search_rag(self, query: str, dataset_ids: List[str], top_k: int = 5, is_need_merge_same_doc: bool = False) -> List[RAGSearchResult]:
+    async def _search_rag(self, query: str, dataset_ids: List[str], top_k: int = 5, is_need_merge_same_doc: bool = False, similarity_threshold: float = 0.3) -> List[RAGSearchResult]:
         """调用RAGFlow MCP服务进行文档搜索"""
         try:
             async def _do_search():
@@ -49,7 +49,8 @@ class RAGFlowService:
                             arguments={
                                 "dataset_ids": dataset_ids,
                                 "question": query,
-                                "top_k": top_k
+                                "top_k": top_k,
+                                "similarity_threshold": similarity_threshold
                             }
                         )
                         return response

@@ -7,11 +7,13 @@ vector_search_fields:
   - table: "kn_quality_trace_prod_order"
     field: "projectname_s"
     description: "项目名称"
-    keywords: ["项目", "工程", "project", "项目名"]
     priority: 1
   - table: "kn_quality_trace_history_fault_info"
-    field: "projectname"
+    field: "project_name"
     description: "项目名称"
-    keywords: ["项目", "工程", "project", "项目名"]
+    priority: 1
+  - table: "kn_quality_trace_history_fault_ncr"
+    field: "project_name"
+    description: "项目名称"
     priority: 1
     

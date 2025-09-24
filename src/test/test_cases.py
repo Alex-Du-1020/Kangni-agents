@@ -207,7 +207,7 @@ async def run_all_tests():
     failed = 0
     
     for i, test_case in enumerate(test_cases, 1):
-        # if(i not in [18]):  # Test both SQL and keyword validation
+        # if(i not in [21]):  # Test both SQL and keyword validation
         #     continue
         question = test_case.get("question", "")
         keywords = test_case.get("keywords", [])

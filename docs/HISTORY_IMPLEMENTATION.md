@@ -52,14 +52,6 @@ The main `/qomo/v1/query` endpoint now automatically:
 - Tracks processing time
 - Stores SQL queries and RAG sources
 
-## Database Configuration
-
-### SQLite (Default for Testing)
-```python
-# Automatically uses SQLite at ./history.db
-# No configuration needed
-```
-
 ## Migration Management
 
 Using Alembic for database migrations:

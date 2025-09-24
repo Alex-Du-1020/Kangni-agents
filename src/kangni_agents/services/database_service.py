@@ -94,12 +94,39 @@ class DatabaseService:
     
     async def generate_sql_from_context(self, question: str, 
         context_data: Dict[str, List[RAGSearchResult]]
-        ) -> Optional[str]:
+        ) -> Dict[str, Any]:
 
-        """基于RAG搜索结果生成SQL查询"""
+        """基于RAG搜索结果生成SQL查询
+
+        返回包含SQL与诊断信息的结构：
+        {
+            "sql": Optional[str],
+            "diagnostics": {
+                "can_generate": bool,
+                "chosen_ddl": str,
+                "selected_fields": List[str],
+                "reasons": List[str],
+                "missing_info": List[str],
+                "suggested_clarifications": List[str],
+                "thought": str
+            }
+        }
+        """
         if not self.llm_available:
-            logger.warning("LLM not available, cannot generate SQL from context")
-            return None
+            msg = "LLM未就绪：llm_service不可用，无法生成SQL"
+            logger.warning(msg)
+            return {
+                "sql": None,
+                "diagnostics": {
+                    "can_generate": False,
+                    "chosen_ddl": "",
+                    "selected_fields": [],
+                    "reasons": [msg],
+                    "missing_info": ["LLM service"],
+                    "suggested_clarifications": [],
+                    "thought": "模型不可用，无法进入SQL生成流程"
+                }
+            }
             
         try:
             # 1. 预处理查询，提取特殊标记
@@ -117,24 +144,24 @@ class DatabaseService:
 基于提供的数据库结构、查询示例和描述信息，为用户问题生成准确的SQL查询。
 
 【关键要求 - 字段一致性验证】：
-1. 在生成SQL之前，必须先选择一个完整的DDL语句作为参考
-2. 确保SQL中使用的所有字段名都来自同一个DDL语句中的表结构
-3. 如果多个DDL包含相似表名，必须明确选择其中一个DDL作为字段来源
-4. 禁止混合使用不同DDL中的字段，即使字段名相同
-5. 在生成SQL前，先列出选择的DDL和对应的表结构，确保字段一致性
+1. 在生成SQL之前，必须先选择一个完整的DDL语句或者数据库描述作为参考
+2. 确保SQL中使用的所有字段名都来自同一个DDL语句中的表结构或者数据库描述中的表结构
+3. 如果多个DDL包含相似表名，必须明确选择其中一个DDL或者数据库描述作为字段来源
+4. 禁止混合使用不同DDL或者数据库描述中的字段，即使字段名相同
+5. 在生成SQL前，先列出选择的DDL或者数据库描述和对应的表结构，确保字段一致性
 
 必须遵守这些要求：
 1. 只返回SQL查询语句，不要添加额外的解释
 2. 确保SQL语法正确
-3. 字段名必须全部来自同一个DDL语句，不能跨DDL混用字段
+3. 字段名必须全部来自同一个DDL语句或者数据库描述中的表结构，不能跨DDL或者数据库描述混用字段
 4. 考虑查询准确性尽量使用like，字段值需要使用%包裹，而不是 = 
 5. 考虑查询性能，适当使用索引，限制条件，去重，分组等
 6. 如果问题不够明确或缺少必要信息，返回 "INSUFFICIENT_INFO"
-7. 如果无法确定使用哪个DDL，返回 "INSUFFICIENT_INFO"
+7. 如果无法确定使用哪个DDL或者数据库描述，返回 "INSUFFICIENT_INFO"
 
 特别注意：当用户提到"订单"但没有指定具体类型时，默认查询表 kn_quality_trace_prod_order（生产订单表）
 
-数据库表结构信息（可能包含多个DDL，请选择一个完整的DDL使用）：
+数据库表结构信息DDL：
 {ddl_context}
 
 查询示例：
@@ -155,41 +182,84 @@ class DatabaseService:
                 preprocessed
             )
             
-            # 5. 构建人类提示，使用预处理后的查询
+            # 5. 构建人类提示，使用预处理后的查询，并强制JSON输出（包含诊断）
             human_prompt = f"""用户问题：{preprocessed.processed_query}
 
-请按照以下步骤生成SQL查询：
+现在请尝试生成SQL。如果可以生成，请返回可执行的最终SQL（仅一条语句）。
+如果无法生成，请明确说明原因与所需补充信息，并给出你的思考过程摘要。
 
-步骤1：分析提供的DDL上下文，选择一个最相关的完整DDL语句
-步骤2：列出选择的DDL中的表结构和字段信息
-步骤3：确认所有要使用的字段都来自同一个DDL
+请根据以下步骤生成SQL：
+步骤1：分析提供的上下文，选择一个最相关的完整DDL语句或者数据库描述
+步骤2：列出选择的DDL或者数据库描述中的表结构和字段信息
+步骤3：确认所有要使用的字段都来自同一个DDL或者数据库描述中的表结构
 步骤4：生成SQL查询
 
-请直接返回SQL查询语句：
-            """
+严格以JSON格式输出（不要包含多余文字），字段如下：
+{{
+  "can_generate": true|false,
+  "chosen_ddl": "使用的DDL名称或表集合的简述",
+  "selected_fields": ["表.字段", ...],
+  "sql": "若能生成则给出SQL，否则为空字符串",
+  "reasons": ["不能生成SQL的原因，或生成时的关键根据"],
+  "missing_info": ["缺失的限定信息，如对象/字段/范围/时间等"],
+  "suggested_clarifications": ["向用户建议补充的问题"],
+  "thought": "你的推理过程摘要，条理清晰、避免冗长"
+}}
+
+只返回上述JSON。"""
             
             # 6. 调用集中式LLM服务生成SQL
             sql_query = await llm_service.chat_with_system_prompt(
                 enhanced_system_prompt,
                 human_prompt
             )
-            sql_query = sql_query.strip()
-            
-            if sql_query == "INSUFFICIENT_INFO":
-                return None
-            
-            # 7. 恢复占位符为原始值
-            final_sql = query_preprocessor.restore_placeholders_in_sql(
-                sql_query, 
-                preprocessed.placeholders
-            )
-            
-            logger.info(f"Generated SQL: {final_sql}")
-            return final_sql
+            sql_query = sql_query.strip() if isinstance(sql_query, str) else str(sql_query).strip()
+
+            # 解析为诊断JSON；若解析失败则将其视为直接SQL
+            diagnostics: Dict[str, Any] = {}
+            try:
+                diagnostics = json.loads(sql_query)
+            except Exception:
+                diagnostics = {
+                    "can_generate": True,
+                    "chosen_ddl": "",
+                    "selected_fields": [],
+                    "sql": sql_query,
+                    "reasons": ["模型直接返回SQL，无诊断JSON"],
+                    "missing_info": [],
+                    "suggested_clarifications": [],
+                    "thought": ""
+                }
+
+            raw_sql = diagnostics.get("sql") if isinstance(diagnostics, dict) else None
+            final_sql = None
+            if isinstance(raw_sql, str) and raw_sql.strip() and raw_sql != "INSUFFICIENT_INFO":
+                final_sql = query_preprocessor.restore_placeholders_in_sql(
+                    raw_sql, 
+                    preprocessed.placeholders
+                )
+
+            if final_sql:
+                logger.info(f"Generated SQL: {final_sql}")
+                return {"sql": final_sql, "diagnostics": diagnostics}
+            else:
+                # 无SQL，返回诊断信息
+                return {"sql": None, "diagnostics": diagnostics}
             
         except Exception as e:
             logger.error(f"Error generating SQL: {e}")
-            return None
+            return {
+                "sql": None,
+                "diagnostics": {
+                    "can_generate": False,
+                    "chosen_ddl": "",
+                    "selected_fields": [],
+                    "reasons": [str(e)],
+                    "missing_info": [],
+                    "suggested_clarifications": [],
+                    "thought": "SQL生成流程出现异常"
+                }
+            }
     
     async def query_database(self, question: str) -> Dict[str, Any]:
         """完整的数据库查询流程"""
@@ -198,14 +268,17 @@ class DatabaseService:
             # 1. 搜索数据库相关上下文
             context_data = await rag_service.search_db_context(question)
             
-            # 2. 生成SQL查询
-            sql_query = await self.generate_sql_from_context(question, context_data)
+            # 2. 生成SQL查询（含诊断）
+            gen = await self.generate_sql_from_context(question, context_data)
+            sql_query = gen.get("sql")
+            diagnostics = gen.get("diagnostics", {})
             
             if not sql_query:
                 return {
                     "success": False,
-                    "error": "无法生成SQL查询，问题可能不够明确或缺少相关数据库信息",
-                    "context_data": context_data
+                    "error": "无法生成SQL查询：" + "; ".join(diagnostics.get("reasons", []) or ["问题可能不够明确或缺少相关数据库信息"]),
+                    "context_data": context_data,
+                    "generation_diagnostics": diagnostics
                 }
             
             # 3. 执行SQL查询
@@ -215,7 +288,8 @@ class DatabaseService:
                 "success": True,
                 "sql_query": sql_query,
                 "results": query_results,
-                "context_data": context_data
+                "context_data": context_data,
+                "generation_diagnostics": diagnostics
             }
             
         except Exception as e:
