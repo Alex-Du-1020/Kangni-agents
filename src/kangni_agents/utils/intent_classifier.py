@@ -54,7 +54,7 @@ class IntentClassifier:
             db_score += explicit_db_score * 2
         
         # 检查SQL相关词汇
-        if any(word in question_lower for word in ["数据库", "db", "database", "sql", "表", "table", "字段", "field"]):
+        if any(word in question_lower for word in ["数据库", "database", "sql", "数据库表", "table", "字段", "field"]):
             db_score += 1
         
         # 判断意图
