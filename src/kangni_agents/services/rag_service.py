@@ -153,9 +153,9 @@ class RAGFlowService:
         
         # 并行搜索三个数据集
         tasks = [
-            ("ddl", self._search_rag(query, [settings.db_ddl_dataset_id])),
-            ("query_sql", self._search_rag(query, [settings.db_query_sql_dataset_id])),
-            ("description", self._search_rag(query, [settings.db_description_dataset_id]))
+            ("ddl", self._search_rag(query, [settings.db_ddl_dataset_id], similarity_threshold=0.1)),
+            ("query_sql", self._search_rag(query, [settings.db_query_sql_dataset_id], similarity_threshold=0.1)),
+            ("description", self._search_rag(query, [settings.db_description_dataset_id], similarity_threshold=0.1))
         ]
         
         for name, task in tasks:

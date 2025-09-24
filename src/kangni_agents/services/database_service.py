@@ -160,6 +160,7 @@ class DatabaseService:
 7. 如果无法确定使用哪个DDL或者数据库描述，返回 "INSUFFICIENT_INFO"
 
 特别注意：当用户提到"订单"但没有指定具体类型时，默认查询表 kn_quality_trace_prod_order（生产订单表）
+此外：如果选择的表是 kn_quality_trace_prod_order（生产订单表），并且用户问题中提到了“订单号/工单号/单号/订单编号/工单编号”等与订单号相关的描述，请使用字段 workorderno_s，而不是 orderno_s。
 
 数据库表结构信息DDL：
 {ddl_context}
@@ -193,6 +194,7 @@ class DatabaseService:
 步骤2：列出选择的DDL或者数据库描述中的表结构和字段信息
 步骤3：确认所有要使用的字段都来自同一个DDL或者数据库描述中的表结构
 步骤4：生成SQL查询
+步骤5：返回JSON格式，如果包含Markdown代码块，清理掉markdown代码块包裹（例如 ```json ... ``` 或 ``` ... ```）
 
 严格以JSON格式输出（不要包含多余文字），字段如下：
 {{
@@ -214,6 +216,18 @@ class DatabaseService:
                 human_prompt
             )
             sql_query = sql_query.strip() if isinstance(sql_query, str) else str(sql_query).strip()
+            
+            # 清理可能的markdown代码块包裹（例如 ```json ... ``` 或 ``` ... ```）
+            def strip_code_fences(text: str) -> str:
+                s = text.strip()
+                if s.startswith("```json"):
+                    s = s[len("```json"):].lstrip()
+                elif s.startswith("```"):
+                    s = s[len("```"):].lstrip()
+                if s.endswith("```"):
+                    s = s[:-3].rstrip()
+                return s
+            sql_query = strip_code_fences(sql_query)
 
             # 解析为诊断JSON；若解析失败则将其视为直接SQL
             diagnostics: Dict[str, Any] = {}

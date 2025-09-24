@@ -52,9 +52,7 @@
     {
         "id": 8,
         "question": "德里地铁4期项目(20D21028C000)在故障信息查询中共发生多少起故障？",
-        "keywords": [
-            "10"
-        ]
+        "SQL": "FROM kn_quality_trace_history_fault_info WHERE project_code LIKE '%20D21028C000%'"
     },
     {
         "id": 9,
@@ -110,7 +108,8 @@
         "id": 17,
         "question": "西安机场线项目开关开裂的根因是?",
         "keywords": [
-            "乐泰243"
+            "乐泰",
+            "243"
         ]
     },
     {

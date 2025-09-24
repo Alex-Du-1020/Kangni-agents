@@ -3,7 +3,6 @@ from typing import List, Optional, Dict, Any
 from enum import Enum
 
 class QueryType(str, Enum):
-    RAG = "rag"
     DATABASE = "database" 
     HYBRID = "hybrid"
 

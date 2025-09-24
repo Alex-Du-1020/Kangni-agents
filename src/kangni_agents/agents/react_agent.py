@@ -333,6 +333,7 @@ class KangniReActAgent:
         # 添加节点
         workflow.add_node("load_memory", self.load_memory_info)
         workflow.add_node("rewrite_question", self.rewrite_question_with_memory)
+        workflow.add_node("determine_intent", self.determine_intent)
         workflow.add_node("rag_search", self.execute_rag_search)
         workflow.add_node("check_rag_results", self.check_rag_results)
         workflow.add_node("database_query", self.execute_database_query)
@@ -349,7 +350,24 @@ class KangniReActAgent:
         
         # 添加边
         workflow.add_edge("load_memory", "rewrite_question")
-        workflow.add_edge("rewrite_question", "rag_search")
+        workflow.add_edge("rewrite_question", "determine_intent")
+        
+        # 根据意图决定走向：若更偏数据库，直接进入数据库查询；否则先RAG
+        def route_by_intent(state: AgentState) -> str:
+            intent = state.get("intent")
+            logger.info(f"Routing by intent: {intent}")
+            if intent == QueryType.DATABASE:
+                return "database_query"
+            return "rag_search"
+
+        workflow.add_conditional_edges(
+            "determine_intent",
+            route_by_intent,
+            {
+                "rag_search": "rag_search",
+                "database_query": "database_query",
+            },
+        )
         workflow.add_edge("rag_search", "check_rag_results")
         
         # 条件边：检查RAG结果
@@ -483,6 +501,23 @@ class KangniReActAgent:
                 **state,
                 "original_query": original_query,
                 "rewritten_query": original_query
+            }
+
+    async def determine_intent(self, state: AgentState) -> AgentState:
+        """基于改写后的问题做一个快速意图判断，决定是否跳过RAG直接查库"""
+        query = state.get("rewritten_query") or state["query"]
+        try:
+            inferred_intent = intent_classifier.classify_intent(query)
+            logger.info(f"Intent determined: {inferred_intent}")
+            return {
+                **state,
+                "intent": inferred_intent
+            }
+        except Exception as e:
+            logger.warning(f"Intent classification failed, fallback to HYBRID: {e}")
+            return {
+                **state,
+                "intent": QueryType.HYBRID
             }
         
         try:
