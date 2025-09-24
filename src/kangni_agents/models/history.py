@@ -40,6 +40,7 @@ class QueryHistory(Base):
     session_id = Column(String(100), index=True)
     user_email = Column(String(255), index=True)
     question = Column(Text, nullable=False)
+    rewritten_question = Column(Text)  # Store memory-rewritten question if applicable
     answer = Column(Text)
     sql_query = Column(Text)  # Store generated SQL if applicable
     sources = Column(JSON)  # Store RAG sources as JSON
@@ -71,6 +72,7 @@ class QueryHistory(Base):
             "session_id": self.session_id,
             "user_email": self.user_email,
             "question": self.question,
+            "rewritten_question": self.rewritten_question,
             "answer": self.answer,
             "sql_query": self.sql_query,
             "sources": self.sources,

@@ -25,9 +25,11 @@ logger = logging.getLogger(__name__)
 
 # Test configuration
 TEST_EMAIL = "agent_memory_test@example.com"
-TEST_SESSION = "agent-memory-test-session-999"
+TEST_SESSION = "agent-memory-test-session-111"
 TEST_EMAIL_2 = "agent_memory_test_2@example.com"
-TEST_SESSION_2 = "agent-memory-test-session-777"
+TEST_SESSION_2 = "agent-memory-test-session-222"
+TEST_EMAIL_3 = "agent_memory_test_3@example.com"
+TEST_SESSION_3 = "agent-memory-test-session-333"
 
 
 class ReactAgentMemoryTests:
@@ -74,6 +76,17 @@ A: 合肥s1号线项目乘客室门项目共有 **209** 个生产订单。
             memory_type=MemoryType.SHORT_TERM,
             importance=MemoryImportance.HIGH,
             session_id=TEST_SESSION_2
+        )
+
+
+        await self.memory_service.create_memory(
+            user_email=TEST_EMAIL_3,
+            content="""Q: 上海1号线项目的发生了多少起故障，他们的故障模式分别是什么
+A: 上海1号线项目共发生了 **4 起** 故障，故障模式为 **“其他”**。
+            """,
+            memory_type=MemoryType.SHORT_TERM,
+            importance=MemoryImportance.HIGH,
+            session_id=TEST_SESSION_3
         )
             
         # Check if agent is available
@@ -135,6 +148,7 @@ A: 合肥s1号线项目乘客室门项目共有 **209** 个生产订单。
             self.results["agent_memory_context"] = {"success": False, "error": str(e)}
             return False
     
+    @pytest.mark.asyncio
     async def test_agent_with_memory_sql_query(self):
         """Test agent query with memory context"""
         print("\n1️⃣ Testing agent query with memory context...")
@@ -159,13 +173,66 @@ A: 合肥s1号线项目乘客室门项目共有 **209** 个生产订单。
             print(f"   - Confidence: {response.confidence}")
             print(f"   - Has SQL: {response.sql_query}")
             print(f"   - Has sources: {len(response.sources) if response.sources else 0}")
-            
+
             # Check if response contains memory-related information
             if response.answer and ("东莞1号线" in response.answer or "接地线" in response.answer or "线束" in response.answer):
-                print("✅ Response contains memory context (project information mentioned)")
+                assert True
             else:
                 print("⚠️ Response may not be using memory context effectively")
-                print(f"   Response content: {response.answer[:200]}...")
+                assert False
+            
+            # Check if memories were saved to database
+            await self.check_memories_saved(TEST_EMAIL_3)
+            
+            self.results["agent_memory_context"] = {
+                "success": True,
+                "answer_length": len(response.answer) if response.answer else 0,
+                "query_type": str(response.query_type),
+                "confidence": response.confidence,
+                "has_sql": bool(response.sql_query),
+                "has_sources": len(response.sources) if response.sources else 0
+            }
+            return True
+            
+        except Exception as e:
+            print(f"❌ Error testing agent with memory: {e}")
+            import traceback
+            traceback.print_exc()
+            self.results["agent_memory_context"] = {"success": False, "error": str(e)}
+            return False
+   
+    @pytest.mark.asyncio
+    async def test_agent_with_memory_fault(self):
+        """Test agent query with memory context"""
+        print("\n1️⃣ Testing agent query with memory context...")
+        
+        try:
+            if not self.agent.llm_available:
+                print("⚠️ LLM not available, skipping test")
+                self.results["agent_memory_context"] = {"success": False, "error": "LLM not available"}
+                return False
+            
+            test_question = "当前项目故障件发生什么问题了?"
+            
+            response = await self.agent.query(
+                question=test_question,
+                user_email=TEST_EMAIL_3,
+                session_id=TEST_SESSION_3
+            )
+            
+            print(f"✅ Agent response received:")
+            print(f"   - Answer: {response}")
+            print(f"   - Query type: {response.query_type}")
+            print(f"   - Confidence: {response.confidence}")
+            print(f"   - Has SQL: {response.sql_query}")
+            print(f"   - Has sources: {len(response.sources) if response.sources else 0}")
+            
+            # Check if response contains memory-related information
+            if response.answer and ("上海1号线" in response.answer or "基础部件" in response.answer or "其他零部件" in response.answer):
+                assert True
+            else:
+                print("⚠️ Response may not be using memory context effectively")
+                assert False
             
             # Check if memories were saved to database
             await self.check_memories_saved(TEST_EMAIL_2)
@@ -187,6 +254,7 @@ A: 合肥s1号线项目乘客室门项目共有 **209** 个生产订单。
             self.results["agent_memory_context"] = {"success": False, "error": str(e)}
             return False
    
+
     async def check_memories_saved(self, user_email: str):
         """Check if memories are being saved to the database"""
         try:
@@ -273,6 +341,7 @@ A: 合肥s1号线项目乘客室门项目共有 **209** 个生产订单。
         test_methods = [
             # self.test_agent_with_memory_context,
             self.test_agent_with_memory_sql_query,
+            # self.test_agent_with_memory_fault
         ]
         
         passed = 0

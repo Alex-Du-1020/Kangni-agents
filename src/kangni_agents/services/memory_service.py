@@ -88,7 +88,6 @@ class MemoryService:
     async def get_relevant_memories(
         self,
         user_email: str,
-        query: str,
         session_id: Optional[str] = None,
         limit: int = 10,
         include_expired: bool = False
@@ -98,7 +97,6 @@ class MemoryService:
         
         Args:
             user_email: User's email address
-            query: Current query to find relevant memories for
             session_id: Session identifier
             limit: Maximum number of memories to return
             include_expired: Whether to include expired memories
@@ -109,33 +107,29 @@ class MemoryService:
         try:
             with self.db_config.session_scope() as session:
                 # Get short-term memories (recent session context)
-                short_term_query = session.query(Memory).filter(
-                    and_(
-                        Memory.user_email == user_email,
-                        Memory.memory_type == MemoryType.SHORT_TERM
-                    )
-                )
-                
-                if session_id:
-                    short_term_query = short_term_query.filter(
-                        Memory.session_id == session_id
-                    )
-                
-                if not include_expired:
-                    short_term_query = short_term_query.filter(
-                        or_(
-                            Memory.expires_at.is_(None),
-                            Memory.expires_at > datetime.utcnow()
+                # If session_id is empty, short-term memories must be empty by rule
+                if not session_id:
+                    short_term_memories = []
+                else:
+                    short_term_query = session.query(Memory).filter(
+                        and_(
+                            Memory.user_email == user_email,
+                            Memory.memory_type == MemoryType.SHORT_TERM,
+                            Memory.session_id == session_id
                         )
                     )
-                
-                short_term_memories = short_term_query.order_by(
-                    desc(Memory.created_at)
-                ).limit(self.short_term_window).all()
-                
-                # Get long-term memories (important patterns and facts)
-                # Search for relevant content based on keywords
-                keywords = self._extract_keywords(query)
+                    
+                    if not include_expired:
+                        short_term_query = short_term_query.filter(
+                            or_(
+                                Memory.expires_at.is_(None),
+                                Memory.expires_at > datetime.utcnow()
+                            )
+                        )
+                    
+                    short_term_memories = short_term_query.order_by(
+                        desc(Memory.created_at)
+                    ).limit(self.short_term_window).all()
                 
                 long_term_query = session.query(Memory).filter(
                     and_(
@@ -143,13 +137,6 @@ class MemoryService:
                         Memory.memory_type.in_([MemoryType.LONG_TERM, MemoryType.SEMANTIC])
                     )
                 )
-                
-                # Filter by keywords in content
-                if keywords:
-                    keyword_filters = []
-                    for keyword in keywords:
-                        keyword_filters.append(Memory.content.contains(keyword))
-                    long_term_query = long_term_query.filter(or_(*keyword_filters))
                 
                 # Prioritize by importance and relevance
                 long_term_memories = long_term_query.order_by(
@@ -376,7 +363,6 @@ class MemoryService:
     async def get_memory_context_for_agent(
         self,
         user_email: str,
-        question: str,
         session_id: Optional[str] = None
     ) -> Dict[str, Any]:
         """
@@ -384,7 +370,6 @@ class MemoryService:
         
         Args:
             user_email: User's email address
-            question: Current question
             session_id: Session identifier
         
         Returns:
@@ -394,7 +379,6 @@ class MemoryService:
             # Get relevant memories
             short_term, long_term = await self.get_relevant_memories(
                 user_email=user_email,
-                query=question,
                 session_id=session_id,
                 limit=5
             )

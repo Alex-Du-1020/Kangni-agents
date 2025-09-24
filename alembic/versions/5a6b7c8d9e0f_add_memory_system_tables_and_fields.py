@@ -1,8 +1,8 @@
 """Add memory system tables and fields
 
 Revision ID: 5a6b7c8d9e0f
-Revises: e1af37c3d2d7
-Create Date: 2025-01-11 15:45:00.000000
+Revises: 4e5ea368d3fa
+Create Date: 2025-09-11 15:45:00.000000
 
 """
 from alembic import op
@@ -12,7 +12,7 @@ import json
 
 # revision identifiers, used by Alembic.
 revision = '5a6b7c8d9e0f'
-down_revision = 'e1af37c3d2d7'
+down_revision = '4e5ea368d3fa'
 branch_labels = None
 depends_on = None
 

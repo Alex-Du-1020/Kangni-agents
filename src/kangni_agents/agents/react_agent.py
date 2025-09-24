@@ -81,9 +81,9 @@ async def vector_database_query_tool(question: str, failed_sql: str = None) -> D
     import yaml
     from pathlib import Path
     from ..utils.sql_parser import SQLParser
-    
+
     logger.info(f"Starting vector-enhanced database query for: {question}")
-    
+
     try:
         # Load vector search configuration
         config_path = Path(__file__).parent.parent / "config" / "vector_search_config.yaml"
@@ -98,32 +98,32 @@ async def vector_database_query_tool(question: str, failed_sql: str = None) -> D
                 "success": False,
                 "error": "Missing vector_search_config.yaml"
             }
-        
+
         # Parse the failed SQL to identify tables and fields
         sql_parser = SQLParser()
         parsed_sql = {}
         if failed_sql:
             parsed_sql = sql_parser.parse_sql(failed_sql)
             logger.info(f"Parsed SQL - tables: {parsed_sql.get('tables')}, fields: {parsed_sql.get('fields')}")
-        
+
         # Collect suggestions for all relevant fields
         all_suggestions = {}
         vector_fields = vector_config.get('vector_search_fields', [])
-        
+
         for field_config in vector_fields:
             table = field_config['table']
             field = field_config['field']
             description = field_config.get('description', field)
-            
+
             # Check if this field is relevant to the query
             should_search = False
-            
+
             # If we have a parsed SQL, check if the table/field is mentioned
             if parsed_sql:
                 if table in parsed_sql.get('tables', []) and field in parsed_sql.get('fields', []):
                     should_search = True
                     logger.info(f"Field {table}.{field} found in failed SQL")
-            
+
             # Also check if keywords from the question match this field's keywords
             keywords = field_config.get('keywords', [])
             question_lower = question.lower()
@@ -132,10 +132,10 @@ async def vector_database_query_tool(question: str, failed_sql: str = None) -> D
                     should_search = True
                     logger.info(f"Keyword '{keyword}' found in question for field {table}.{field}")
                     break
-            
+
             if should_search:
                 logger.info(f"Searching for similar values in {table}.{field} ({description})")
-                
+
                 # Get similar values from the database
                 suggestions = await vector_service.search_similar_values(
                     search_text=question,
@@ -144,7 +144,7 @@ async def vector_database_query_tool(question: str, failed_sql: str = None) -> D
                     top_k=settings.max_suggestions or 3,  # This is already the max_suggestions value
                     similarity_threshold=settings.similarity_threshold or 0.3  # This is already the threshold value
                 )
-                
+
                 if suggestions:
                     # Limit suggestions to max_suggestions
                     limited_suggestions = suggestions[:settings.max_suggestions]
@@ -157,7 +157,7 @@ async def vector_database_query_tool(question: str, failed_sql: str = None) -> D
                         "table": table,
                         "field": field
                     }
-        
+
         if not all_suggestions:
             logger.info("No vector search suggestions found")
             return {
@@ -166,7 +166,7 @@ async def vector_database_query_tool(question: str, failed_sql: str = None) -> D
                 "suggestions": {},
                 "message": "向量搜索未找到匹配的值"
             }
-        
+
         # Build enhanced prompt with suggestions
         suggestion_text = "\n\n基于向量搜索找到的数据库实际值：\n"
         for field_key, field_data in all_suggestions.items():
@@ -175,13 +175,13 @@ async def vector_database_query_tool(question: str, failed_sql: str = None) -> D
             if len(field_data['values']) > 3:
                 suggestion_text += f" 等{len(field_data['values'])}个值"
             suggestion_text += "\n"
-        
+
         enhanced_question = f"{question}{suggestion_text}\n请使用这些实际存在的值重新生成SQL查询。如果有多个匹配值，使用最相似的值来查询。"
-        
+
         # Generate new SQL with enhanced context
         logger.info("Generating new SQL with vector search suggestions")
         enhanced_result = await db_service.query_database(enhanced_question)
-        
+
         if enhanced_result.get("success"):
             logger.info(f"Vector-enhanced query successful, got {len(enhanced_result.get('results', []))} results")
             enhanced_result["vector_enhanced"] = True
@@ -194,9 +194,9 @@ async def vector_database_query_tool(question: str, failed_sql: str = None) -> D
                 "success": False,
                 "suggestions": all_suggestions,
                 "sql_query": enhanced_result.get("sql_query"),
-                "error": enhanced_result.get("error")
+                "error": enhanced_result.get("error"),
             }
-            
+
     except Exception as e:
         logger.error(f"Error in vector database query tool: {e}")
         return {
@@ -447,7 +447,6 @@ class KangniReActAgent:
             try:
                 memory_context = await memory_service.get_memory_context_for_agent(
                     user_email=user_email,
-                    question=query,
                     session_id=session_id
                 )
 
@@ -487,22 +486,6 @@ class KangniReActAgent:
             "memory_info": memory_info
         }
     
-    async def rewrite_question_with_memory(self, state: AgentState) -> AgentState:
-        """Rewrite question based on memory context to improve search accuracy"""
-        original_query = state["query"]
-        memory_info = state.get("memory_info", "")
-        
-        logger.info(f"Rewriting question with memory context: {original_query}")
-        
-        # If no memory context available, use original question
-        if not memory_info or memory_info.strip() == "":
-            logger.info("No memory context available, using original question")
-            return {
-                **state,
-                "original_query": original_query,
-                "rewritten_query": original_query
-            }
-
     async def determine_intent(self, state: AgentState) -> AgentState:
         """基于改写后的问题做一个快速意图判断，决定是否跳过RAG直接查库"""
         query = state.get("rewritten_query") or state["query"]
@@ -518,6 +501,22 @@ class KangniReActAgent:
             return {
                 **state,
                 "intent": QueryType.HYBRID
+            }
+    
+    async def rewrite_question_with_memory(self, state: AgentState) -> AgentState:
+        """Rewrite question based on memory context to improve search accuracy"""
+        original_query = state["query"]
+        memory_info = state.get("memory_info", "")
+        
+        logger.info(f"Rewriting question with memory context: {original_query}")
+        
+        # If no memory context available, use original question
+        if not memory_info or memory_info.strip() == "":
+            logger.info("No memory context available, using original question")
+            return {
+                **state,
+                "original_query": original_query,
+                "rewritten_query": original_query
             }
         
         try:
@@ -1147,6 +1146,7 @@ SQL生成成功: [是/否]
                 user_email=user_email,
                 question=query,
                 answer=answer,
+                rewritten_question=state.get("rewritten_query") or query,
                 sql_query=sql_query,
                 sources=sources,
                 query_type=query_type,
