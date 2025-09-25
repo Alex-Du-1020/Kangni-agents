@@ -43,6 +43,10 @@ class DatabaseQueryRequest(BaseModel):
     question: str
     sql_query: Optional[str] = None
 
+class LLMAnswerRequest(BaseModel):
+    question: str
+    user_email: Optional[str] = None
+
 class QueryResponse(BaseModel):
     answer: str
     query_type: QueryType
@@ -63,7 +67,7 @@ from .llm_providers import (
 __all__ = [
     # 原有模型
     "QueryType", "UserQuery", "QueryResponse", "RAGSearchRequest", 
-    "RAGSearchResult", "DatabaseQueryRequest",
+    "RAGSearchResult", "DatabaseQueryRequest", "LLMAnswerRequest",
     
     # LLM相关模型
     "LLMProvider", "LLMConfig", "LLMMessage", "LLMResponse",

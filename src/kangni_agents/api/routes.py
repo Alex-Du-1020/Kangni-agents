@@ -5,7 +5,7 @@ import logging
 import time
 import uuid
 
-from ..models import UserQuery, QueryResponse
+from ..models import UserQuery, QueryResponse, LLMAnswerRequest
 from ..agents.react_agent import kangni_agent
 from ..services.history_service import history_service
 from ..models.llm_implementations import llm_service
@@ -78,16 +78,14 @@ async def process_query(query: UserQuery):
 
 
 @router.post("/llm-answer")
-async def llm_answer(
-    question: str = Query(..., description="Direct question to answer"),
-    user_email: Optional[str] = Query(None, description="User email for context")
-):
+async def llm_answer(request: LLMAnswerRequest):
     """
     Answer a user's question using LLM only (no RAG, no database query)
     
     Args:
-        question: Direct question to answer
-        user_email: User email for context (optional)
+        request: LLMAnswerRequest containing:
+            - question (str): Direct question to answer
+            - user_email (str, optional): User email for context
     
     Returns:
         JSON response with LLM answer
@@ -98,12 +96,12 @@ async def llm_answer(
     start_time = time.time()
     
     try:
-        logger.info(f"Processing LLM-only question: {question}")
+        logger.info(f"Processing LLM-only question: {request.question}")
         
         # Prepare messages for LLM
         messages = [
             LLMMessage(role="system", content="You are a helpful assistant. Answer the user's question directly and concisely."),
-            LLMMessage(role="user", content=question)
+            LLMMessage(role="user", content=request.question)
         ]
         
         # Get LLM response with fallback
@@ -116,7 +114,7 @@ async def llm_answer(
         except Exception as llm_error:
             logger.warning(f"LLM service failed: {llm_error}, providing fallback response")
             # Provide a fallback response when LLM is not available
-            answer = f"I apologize, but I'm currently unable to process your question '{question}' due to LLM service unavailability. Please try again later or contact support."
+            answer = f"I apologize, but I'm currently unable to process your question '{request.question}' due to LLM service unavailability. Please try again later or contact support."
             llm_provider = "fallback"
             model_name = "fallback"
         
@@ -125,8 +123,8 @@ async def llm_answer(
         # Prepare response
         response = {
             "answer": answer,
-            "question": question,
-            "user_email": user_email,
+            "question": request.question,
+            "user_email": request.user_email,
             "processing_time_ms": processing_time_ms,
             "llm_provider": llm_provider,
             "model_name": model_name,
