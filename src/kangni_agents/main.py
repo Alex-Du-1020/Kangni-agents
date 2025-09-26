@@ -14,6 +14,7 @@ from .config import settings
 from .api.routes import router
 from .api.history_routes import router as history_router
 from .api.embedding_routes import router as embedding_router
+from .api.eight_d_analysis_routes import router as d8_analysis_router
 
 # Import required services
 from .services.rag_service import rag_service
@@ -172,6 +173,7 @@ def create_app() -> FastAPI:
     app.include_router(router)
     app.include_router(history_router)
     app.include_router(embedding_router)
+    app.include_router(d8_analysis_router)
     
     @app.get("/")
     async def root():

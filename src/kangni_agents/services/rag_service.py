@@ -35,7 +35,7 @@ class RAGFlowService:
             logger.error(f"RAG service connection test failed: {e}")
             return False
     
-    async def _search_rag(self, query: str, dataset_ids: List[str], top_k: int = 5, is_need_merge_same_doc: bool = False, similarity_threshold: float = 0.3) -> List[RAGSearchResult]:
+    async def search_rag(self, query: str, dataset_ids: List[str], top_k: int = 5, is_need_merge_same_doc: bool = False, similarity_threshold: float = 0.3) -> List[RAGSearchResult]:
         """调用RAGFlow MCP服务进行文档搜索"""
         try:
             async def _do_search():
@@ -153,9 +153,9 @@ class RAGFlowService:
         
         # 并行搜索三个数据集
         tasks = [
-            ("ddl", self._search_rag(query, [settings.db_ddl_dataset_id], similarity_threshold=0.1)),
-            ("query_sql", self._search_rag(query, [settings.db_query_sql_dataset_id], similarity_threshold=0.1)),
-            ("description", self._search_rag(query, [settings.db_description_dataset_id], similarity_threshold=0.1))
+            ("ddl", self.search_rag(query, [settings.db_ddl_dataset_id], similarity_threshold=0.1)),
+            ("query_sql", self.search_rag(query, [settings.db_query_sql_dataset_id], similarity_threshold=0.1)),
+            ("description", self.search_rag(query, [settings.db_description_dataset_id], similarity_threshold=0.1))
         ]
         
         for name, task in tasks:
@@ -337,7 +337,7 @@ class RAGFlowService:
         """搜索RAG并生成答案"""
         try:
             # 首先进行文档搜索，启用文档合并
-            search_results = await self._search_rag(query, settings.ragflow_dataset_ids, top_k, is_need_merge_same_doc=True)
+            search_results = await self.search_rag(query, settings.ragflow_dataset_ids, top_k, is_need_merge_same_doc=True)
             
             # 然后使用LLM生成答案
             answer = await self.generate_answer_with_llm(query, search_results)
