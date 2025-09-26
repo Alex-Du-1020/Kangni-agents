@@ -1,16 +1,19 @@
 from pydantic_settings import BaseSettings
-from typing import Optional
+from typing import Optional, List
 from pydantic import Field
 
 class Settings(BaseSettings):
     # RAG设置
-    ragflow_mcp_server_url: str = "http://158.58.50.45:9382/mcp"
-    ragflow_dataset_ids: list[str] = ["f3073258886911f08bc30242c0a82006", "e015ebf8886911f0952f0242c0a82006"]
+    ragflow_mcp_server_url: str = Field(default="http://158.58.50.45:9382/mcp", alias="RAGFLOW_MCP_SERVER_URL")
+    ragflow_dataset_ids: List[str] = Field(
+        default=["e1c90b209ad311f09b6d0242c0a87006", "b32951fc9acf11f0a21c0242c0a87006"],
+        alias="RAGFLOW_DATASET_IDS"
+    )
     
     # 数据库相关RAG数据集IDs
-    db_ddl_dataset_id: str = "10123e2487f211f0aeb40242c0a80006"
-    db_query_sql_dataset_id: str = "ffcc7faa87f311f09d4a0242c0a80006"
-    db_description_dataset_id: str = "6768e88087f211f0a8b00242c0a80006"
+    db_ddl_dataset_id: str = "2eeb6f2a9ac911f094c80242c0a85006"
+    db_query_sql_dataset_id: str = "3387079e9acc11f0b60f0242c0a87006"
+    db_description_dataset_id: str = "8c443ba09acb11f093460242c0a87006"
     
     # 数据库配置
     mysql_host: Optional[str] = "localhost"

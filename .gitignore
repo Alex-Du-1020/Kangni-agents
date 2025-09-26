@@ -51,3 +51,6 @@ logs/
 .serena/
 
 .cursorrules
+
+filtered_downloads/
+minio_downloads/
