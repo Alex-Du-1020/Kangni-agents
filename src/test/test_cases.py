@@ -65,7 +65,8 @@ async def clear_test_data(test_emails=None):
 
 
 class TestResult:
-    def __init__(self, question: str, keywords: List[str] = None, expected_sql: str = None):
+    def __init__(self, id: int, question: str, keywords: List[str] = None, expected_sql: str = None):
+        self.id = id
         self.question = question
         self.expected_keywords = keywords or []
         self.expected_sql = expected_sql
@@ -139,7 +140,7 @@ class TestResult:
 
 async def run_single_test(question: str, keywords: List[str] = None, expected_sql: str = None, id: int = None) -> TestResult:
     """运行单个测试用例"""
-    result = TestResult(question, keywords, expected_sql)
+    result = TestResult(id, question, keywords, expected_sql)
     
     try:
         logger.info(f"Testing: {question[:50]}...")
@@ -207,8 +208,8 @@ async def run_all_tests():
     failed = 0
     
     for i, test_case in enumerate(test_cases, 1):
-        if(i not in [23]):  # Test both SQL and keyword validation
-            continue
+        # if(i not in [1]):  # Test both SQL and keyword validation
+        #     continue
         question = test_case.get("question", "")
         keywords = test_case.get("keywords", [])
         expected_sql = test_case.get("SQL", None)
@@ -260,7 +261,7 @@ async def run_all_tests():
         print(f"\n❌ FAILED CASES:")
         for result in results:
             if not result.success:
-                print(f"  • {result.question}")
+                print(f"  • {result.id}: {result.question} ")
                 if result.error:
                     print(f"    Error: {result.error}")
                 else:
