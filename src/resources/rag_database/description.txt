@@ -424,7 +424,7 @@ duty_dept_name：责任部门名称，负责部门的名称
 expect_finish_time：预期完成日期，预计问题解决的日期
 question_desc：不合格内容/描述，问题的详细描述信息
 unqua_type：不合格类型1-产品不合格 2-过程不合格，不合格的类型分类
-unqua_type_name：不合格类型名称，不合格类型的名称描述
+unqua_type_name：不合格类型名称，不合格类型的名称描述，有以下值：产品不合格，过程不合格
 trigger_unqua：过程不合是否导致产品不合格 1-是 0-否，过程不合格是否影响产品
 trigger_unqua_name：过程不合是否导致产品不合格名称，过程不合格影响的名称描述
 attach_file_id：附件id多个逗号分隔，相关附件的唯一标识
@@ -458,7 +458,7 @@ occur_time：问题发生时间，问题实际发生的时间
 supplier_id：供应商id，相关供应商的唯一标识
 supplier_name：供应商名称，相关供应商的名称
 defect_category_id：缺陷分类id，缺陷分类的唯一标识
-defect_category_name：缺陷分类名称，缺陷分类的名称描述
+defect_category_name：缺陷分类名称，缺陷分类的名称描述，有以下值：其他，错漏类，形状和尺寸类，表面缺陷类，门控器售后专用，功能失常，松脱漏堵，损坏损伤，功能失效，退化变质，线束类，性能，报告类
 parent_duty_id：父级责任部门id，上级责任部门的唯一标识
 parent_duty_name：父级责任部门名称，上级责任部门的名称
 pending_names：当前处置人，当前负责处理的人员

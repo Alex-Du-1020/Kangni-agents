@@ -5,7 +5,6 @@ source .venv/bin/activate
 
 # Set production environment
 export ENVIRONMENT=production
-export LOG_LEVEL=INFO
 
 # Check if .env file exists and load it
 if [ -f .env ]; then
