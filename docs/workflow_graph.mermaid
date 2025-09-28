@@ -7,6 +7,7 @@ graph TD;
 	__start__([<p>__start__</p>]):::first
 	load_memory(load_memory)
 	rewrite_question(rewrite_question)
+	determine_intent(determine_intent)
 	rag_search(rag_search)
 	check_rag_results(check_rag_results)
 	database_query(database_query)
@@ -23,10 +24,12 @@ graph TD;
 	check_rag_results -.-> generate_response;
 	database_query --> validate_db_results;
 	database_retry --> validate_retry_results;
+	determine_intent -.-> database_query;
+	determine_intent -.-> rag_search;
 	generate_response --> save_memory;
 	load_memory --> rewrite_question;
 	rag_search --> check_rag_results;
-	rewrite_question --> rag_search;
+	rewrite_question --> determine_intent;
 	validate_db_results -.-> database_retry;
 	validate_db_results -.-> generate_response;
 	validate_db_results -.-> vector_search;

@@ -134,9 +134,9 @@ class DatabaseService:
             logger.info(f"Query preprocessing completed: {len(preprocessed.entities)} entities found")
             
             # 2. 构建上下文信息
-            ddl_context = "\n\n\n".join([r.content for r in context_data.get("ddl", [])])
-            query_examples = "\n\n\n".join([r.content for r in context_data.get("query_sql", [])])
-            db_description = "\n\n\n".join([r.content for r in context_data.get("description", [])])
+            ddl_context = "&&&&&".join([r.content for r in context_data.get("ddl", [])])
+            query_examples = "&&&&&".join([r.content for r in context_data.get("query_sql", [])])
+            db_description = "&&&&&".join([r.content for r in context_data.get("description", [])])
             
             # 3. 构建基础系统提示
             base_system_prompt = f"""你是一个专业的SQL生成助手。
@@ -144,20 +144,20 @@ class DatabaseService:
 基于提供的数据库结构、查询示例和描述信息，为用户问题生成准确的SQL查询。
 
 【关键要求 - 字段一致性验证】：
-1. 在生成SQL之前，必须先选择一个完整的DDL语句或者数据库描述作为参考
+1. 在生成SQL之前，必须先选择一个完整的数据库描述作为参考，不同的数据库描述之间用 &&&&& 分割
 2. 确保SQL中使用的所有字段名都来自同一个DDL语句中的表结构或者数据库描述中的表结构
-3. 如果多个DDL包含相似表名，必须明确选择其中一个DDL或者数据库描述作为字段来源
-4. 禁止混合使用不同DDL或者数据库描述中的字段，即使字段名相同
-5. 在生成SQL前，先列出选择的DDL或者数据库描述和对应的表结构，确保字段一致性
+3. 如果多个数据库描述包含相似表名，必须明确选择其中一个数据库描述作为字段来源
+4. 禁止混合使用不同数据库描述中的字段，即使字段名相同
+5. 在生成SQL前，先列出选择的数据库描述和对应的表结构，确保字段一致性
 
 必须遵守这些要求：
 1. 只返回SQL查询语句，不要添加额外的解释
 2. 确保SQL语法正确
-3. 字段名必须全部来自同一个DDL语句或者数据库描述中的表结构，不能跨DDL或者数据库描述混用字段
+3. 字段名必须全部来自同一个数据库描述中的表结构，不能跨数据库描述混用字段
 4. 考虑查询准确性尽量使用like，字段值需要使用%包裹，而不是 = 
 5. 考虑查询性能，适当使用索引，限制条件，去重，分组等
 6. 如果问题不够明确或缺少必要信息，返回 "INSUFFICIENT_INFO"
-7. 如果无法确定使用哪个DDL或者数据库描述，返回 "INSUFFICIENT_INFO"
+7. 如果无法确定使用哪个数据库描述，返回 "INSUFFICIENT_INFO"
 
 特别注意：当用户提到"订单"但没有指定具体类型时，默认查询表 kn_quality_trace_prod_order（生产订单表）
 此外：如果选择的表是 kn_quality_trace_prod_order（生产订单表），并且用户问题中提到了“订单号/工单号/单号/订单编号/工单编号”等与订单号相关的描述，请使用字段 workorderno_s，而不是 orderno_s。
@@ -190,9 +190,9 @@ class DatabaseService:
 如果无法生成，请明确说明原因与所需补充信息，并给出你的思考过程摘要。
 
 请根据以下步骤生成SQL：
-步骤1：分析提供的上下文，选择一个最相关的完整DDL语句或者数据库描述
+步骤1：分析提供的上下文，选择一个最相关的完整数据库描述
 步骤2：列出选择的DDL或者数据库描述中的表结构和字段信息
-步骤3：确认所有要使用的字段都来自同一个DDL或者数据库描述中的表结构
+步骤3：确认所有要使用的字段都来自同一个数据库描述中的表结构
 步骤4：生成SQL查询
 步骤5：返回JSON格式，如果包含Markdown代码块，清理掉markdown代码块包裹（例如 ```json ... ``` 或 ``` ... ```）
 

@@ -77,3 +77,5 @@
 查询物料检验的及时性分析	SELECT material_description, DATEDIFF(inspection_end_date, inspection_start_date) as inspection_days FROM kn_quality_trace_bom_data WHERE inspection_start_date IS NOT NULL AND inspection_end_date IS NOT NULL;
 查看设备异常的时间分布模式	SELECT HOUR(exception_time) as hour, COUNT(*) as exception_count FROM kn_quality_equipment_exception_data GROUP BY HOUR(exception_time) ORDER BY hour;
 查询BOM数据的批次质量追溯	SELECT A.batch, A.material_description, A.supplier_name, B.projectname_s, B.railwayno FROM kn_quality_trace_bom_data A LEFT JOIN kn_quality_trace_bom_data_fault B ON A.order_number = B.workorderno_s WHERE A.defect_quantity > 0;
+查询主要的故障模式	SELECT defect_name, COUNT(*) AS cnt FROM kn_quality_trace_history_fault_corrective WHERE del_flag = '0' GROUP BY defect_name ORDER BY cnt DESC LIMIT 10;
+查询玻璃钢罩板表面缺陷的原因是什么	SELECT material_name, defect_name, cause_analysis FROM kn_quality_trace_history_fault_corrective WHERE material_name LIKE '%玻璃钢罩板%' AND defect_name LIKE '%表面缺陷%' LIMIT 1;
