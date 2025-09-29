@@ -45,7 +45,7 @@ class AgentState(TypedDict):
     final_answer: Optional[str]
     source_links: Optional[List[str]]
     # Memory-related fields
-    memory_info: Optional[str]
+    memory_context: Optional[Dict[str, Any]]
     user_email: Optional[str]
     session_id: Optional[str]
     start_time: Optional[float]
@@ -443,7 +443,7 @@ class KangniReActAgent:
         logger.info(f"Loading memory context for user: {user_email}, session: {session_id}")
         
         # Get memory context from memory service
-        memory_info = ""
+        memory_context = {}
         if user_email:
             try:
                 memory_context = await memory_service.get_memory_context_for_agent(
@@ -451,40 +451,13 @@ class KangniReActAgent:
                     session_id=session_id
                 )
 
-                # Build memory context string
-                memory_info = ""
-                if memory_context:
-                    # Add recent interactions
-                    # recent_interactions = memory_context.get("recent_interactions", [])
-                    # if recent_interactions:
-                    #     memory_info += "\n最近的交互历史:\n"
-                    #     for interaction in recent_interactions[:3]:
-                    #         memory_info += f"- Q: {interaction['question']}...\n"
-                    #         if interaction.get('answer'):
-                    #             memory_info += f"  A: {interaction['answer']}...\n"
-                    
-                    # # Add long-term memories
-                    # long_term = memory_context.get("long_term_memories", [])
-                    # if long_term:
-                    #     memory_info += "\n相关的长期记忆:\n"
-                    #     for mem in long_term[:3]:
-                    #         memory_info += f"- {mem['content'][:150]}... (重要性: {mem.get('importance', 'unknown')})\n"
-                    
-                    # Add short-term memories
-                    short_term = memory_context.get("short_term_memories", [])
-                    if short_term:
-                        memory_info += "\n会话上下文:\n"
-                        for mem in short_term:
-                            memory_info += f"- {mem['content']}...\n"
-
-                logger.info(f"Loaded memory context with {len(memory_context.get('short_term_memories', []))} short-term and {len(memory_context.get('long_term_memories', []))} long-term memories")
             except Exception as e:
                 logger.error(f"Failed to load memory context: {e}")
         
         return {
             **state,
             "start_time": time.time(),
-            "memory_info": memory_info
+            "memory_context": memory_context  # Save the full memory context for rewrite_question
         }
     
     async def determine_intent(self, state: AgentState) -> AgentState:
@@ -507,18 +480,59 @@ class KangniReActAgent:
     async def rewrite_question_with_memory(self, state: AgentState) -> AgentState:
         """Rewrite question based on memory context to improve search accuracy"""
         original_query = state["query"]
-        memory_info = state.get("memory_info", "")
+        memory_context = state.get("memory_context", {})
         
         logger.info(f"Rewriting question with memory context: {original_query}")
+
+        def build_memory_info(memory_context: Dict[str, Any]) -> str:
+            # Build memory context string
+            memory_info = ""
+            if memory_context:
+                # Add recent interactions
+                # recent_interactions = memory_context.get("recent_interactions", [])
+                # if recent_interactions:
+                #     memory_info += "\n最近的交互历史:\n"
+                #     for interaction in recent_interactions[:3]:
+                #         memory_info += f"- Q: {interaction['question']}...\n"
+                #         if interaction.get('answer'):
+                #             memory_info += f"  A: {interaction['answer']}...\n"
+                
+                # # Add long-term memories
+                # long_term = memory_context.get("long_term_memories", [])
+                # if long_term:
+                #     memory_info += "\n相关的长期记忆:\n"
+                #     for mem in long_term[:3]:
+                #         memory_info += f"- {mem['content'][:150]}... (重要性: {mem.get('importance', 'unknown')})\n"
+                
+                # Add short-term memories
+                short_term = memory_context.get("short_term_memories", [])
+                if short_term:
+                    memory_info += "\n会话上下文:\n"
+                    for mem in short_term:
+                        memory_info += f"- {mem['content']}...\n"
+            return memory_info
         
-        # If no memory context available, use original question
-        if not memory_info or memory_info.strip() == "":
+        # Check if memory context has any short-term memories
+        short_term_memories = memory_context.get("short_term_memories", [])
+        if not short_term_memories:
             logger.info("No memory context available, using original question")
             return {
                 **state,
                 "original_query": original_query,
                 "rewritten_query": original_query
             }
+            
+        # Build memory info string for LLM prompt
+        memory_info = build_memory_info(memory_context)
+            
+        # Check if recent memories contain DB tag
+        recent_used_db = False
+        if short_term_memories:
+            # Check the most recent memory for DB tag
+            most_recent_memory = short_term_memories[0]
+            tags = most_recent_memory.get("tags", []) or []
+            recent_used_db = "DB" in tags
+            logger.info(f"Most recent memory tags: {tags}, contains DB: {recent_used_db}")
         
         try:
             # Use LLM to rewrite question based on memory context
@@ -575,6 +589,13 @@ class KangniReActAgent:
             if not rewritten_query or rewritten_query == "":
                 logger.warning("Question rewriting failed or returned empty, using original question")
                 rewritten_query = original_query
+            
+            # 检查问题是否被重写且最近使用了数据库
+            question_was_rewritten = rewritten_query != original_query
+            if question_was_rewritten and recent_used_db:
+                # 添加数据库查询前缀
+                rewritten_query = f"调用数据库查询，{rewritten_query}"
+                logger.info(f"Added database query prefix due to recent DB usage")
             
             logger.info(f"Question rewritten: '{original_query}' -> '{rewritten_query}'")
             
@@ -1074,13 +1095,21 @@ SQL生成成功: [是/否]
             
             # Extract and store memories from this interaction
             if query_history_id and final_answer:
+                # Determine if RAG or DB was used based on agent state
+                used_rag = state.get("rag_has_results", False)
+                used_db = state.get("db_results_valid", False) or state.get("db_success", False)
+                
+                logger.info(f"Saving memory with tags - RAG: {used_rag}, DB: {used_db}")
+                
                 memory_ids = await memory_service.extract_and_store_memories(
                     query_id=query_history_id,
                     user_email=user_email,
                     question=query,
                     answer=final_answer,
                     session_id=session_id,
-                    feedback_type=None  # Will be updated when user provides feedback
+                    feedback_type=None,  # Will be updated when user provides feedback
+                    used_rag=used_rag,
+                    used_db=used_db
                 )
                 logger.info(f"Saved {len(memory_ids)} memories for interaction")
             
@@ -1203,7 +1232,7 @@ SQL生成成功: [是/否]
                 "final_answer": None,
                 "source_links": None,
                 # Memory-related fields
-                "memory_info": None,
+                "memory_context": None,
                 "user_email": user_email,
                 "session_id": session_id,
                 "start_time": time.time(),

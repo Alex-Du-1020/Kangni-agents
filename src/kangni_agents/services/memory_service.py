@@ -169,7 +169,9 @@ class MemoryService:
         question: str,
         answer: str,
         session_id: Optional[str] = None,
-        feedback_type: Optional[str] = None
+        feedback_type: Optional[str] = None,
+        used_rag: bool = False,
+        used_db: bool = False
     ) -> List[int]:
         """
         Extract important information from a query interaction and store as memories
@@ -181,6 +183,8 @@ class MemoryService:
             answer: Agent's answer
             session_id: Session identifier
             feedback_type: User feedback (like/dislike)
+            used_rag: Whether RAG was used for this query
+            used_db: Whether database query was used for this query
         
         Returns:
             List of created memory IDs
@@ -202,6 +206,15 @@ class MemoryService:
             elif feedback_type == "dislike":
                 importance = MemoryImportance.LOW
             
+            # Build tags based on data sources used
+            memory_tags = ["conversation", "recent"]
+            if used_rag:
+                memory_tags.append("RAG")
+            if used_db:
+                memory_tags.append("DB")
+            
+            logger.info(f"Creating short-term memory with tags: {memory_tags}")
+            
             # Store short-term memory (conversation context)
             short_memory = await self.create_memory(
                 user_email=user_email,
@@ -211,7 +224,7 @@ class MemoryService:
                 session_id=session_id,
                 source_query_id=query_id,
                 related_entities=entities[:5],  # Limit entities
-                tags=["conversation", "recent"]
+                tags=memory_tags
             )
             memories_created.append(short_memory.id)
             
@@ -397,7 +410,8 @@ class MemoryService:
                     {
                         "content": m["content"],
                         "created_at": m["created_at"],
-                        "importance": m["importance"]
+                        "importance": m["importance"],
+                        "tags": m.get("tags", [])
                     } for m in short_term[:3]  # Limit to avoid context overload
                 ],
                 "long_term_memories": [

@@ -30,6 +30,14 @@ TEST_EMAIL_2 = "agent_memory_test_2@example.com"
 TEST_SESSION_2 = "agent-memory-test-session-222"
 TEST_EMAIL_3 = "agent_memory_test_3@example.com"
 TEST_SESSION_3 = "agent-memory-test-session-333"
+TEST_EMAIL_4 = "agent_memory_test_4@example.com"
+TEST_SESSION_4 = "agent-memory-test-session-444"
+
+# Expected SQL placeholders (fill these with the exact SQL when available)
+# If left as empty string, the strict SQL assertion will be skipped
+EXPECTED_SQL_CASE_2 = ["FROM kn_quality_trace_prod_order", "projectname_s LIKE '%合肥S1号线项目乘客室门%'"]  # e.g., "SELECT ..."
+EXPECTED_SQL_CASE_3 = ["FROM kn_quality_trace_history_fault_info", "project_name LIKE '%上海1号线%'"]  # e.g., "SELECT ..."
+EXPECTED_SQL_CASE_4 = ["FROM kn_quality_trace_history_fault_info", "project_name LIKE '%深圳地铁14号线%'"]  # e.g., "SELECT ..."
 
 
 class ReactAgentMemoryTests:
@@ -88,6 +96,17 @@ A: 上海1号线项目共发生了 **4 起** 故障，故障模式为 **“其�
             importance=MemoryImportance.HIGH,
             session_id=TEST_SESSION_3
         )
+
+        await self.memory_service.create_memory(
+            user_email=TEST_EMAIL_4,
+            content="""Q: 深圳地铁14号线项目一共发生多少起故障
+A: 深圳地铁14号线项目共发生了 681 起故障。
+            """,
+            memory_type=MemoryType.SHORT_TERM,
+            importance=MemoryImportance.HIGH,
+            session_id=TEST_SESSION_4,
+            tags=["DB"]
+        )
             
         # Check if agent is available
         if not self.agent.llm_available:
@@ -122,14 +141,12 @@ A: 上海1号线项目共发生了 **4 起** 故障，故障模式为 **“其�
             print(f"   - Has SQL: {response.sql_query}")
             print(f"   - Has sources: {len(response.sources) if response.sources else 0}")
             
-            # Check if response contains memory-related information
-            if response.answer and ("东莞1号线" in response.answer or "接地线" in response.answer or "线束" in response.answer):
-                assert True, "Response contains memory context"
-            else:
-                assert False, "Response does not contain memory context"
+            # Case 1 is expected to be RAG: ensure query_type and sources
+            assert not response.sql_query
+            assert response.sources and len(response.sources) > 0, "RAG case should include sources"
             
-            # Check if memories were saved to database
-            await self.check_memories_saved(TEST_EMAIL)
+            # Check memory count increases after the call
+            await self.check_memories_saved(TEST_EMAIL, expect_increase=True)
             
             self.results["agent_memory_context"] = {
                 "success": True,
@@ -174,15 +191,14 @@ A: 上海1号线项目共发生了 **4 起** 故障，故障模式为 **“其�
             print(f"   - Has SQL: {response.sql_query}")
             print(f"   - Has sources: {len(response.sources) if response.sources else 0}")
 
-            # Check if response contains memory-related information
-            if response.answer and ("东莞1号线" in response.answer or "接地线" in response.answer or "线束" in response.answer):
-                assert True
-            else:
-                print("⚠️ Response may not be using memory context effectively")
-                assert False
+            # Case 2..4 are expected to be SQL. Enforce SQL presence and optional exact match
+            assert response.sql_query and len(response.sql_query) > 0, "Expected SQL to be generated"
+            if response.sql_query:
+                for expected_sql in EXPECTED_SQL_CASE_2:
+                    assert expected_sql.upper() in response.sql_query.strip().upper(), "SQL mismatch for case 2"
             
-            # Check if memories were saved to database
-            await self.check_memories_saved(TEST_EMAIL_3)
+            # Check memory count increases after the call
+            await self.check_memories_saved(TEST_EMAIL_2, expect_increase=True)
             
             self.results["agent_memory_context"] = {
                 "success": True,
@@ -226,16 +242,67 @@ A: 上海1号线项目共发生了 **4 起** 故障，故障模式为 **“其�
             print(f"   - Confidence: {response.confidence}")
             print(f"   - Has SQL: {response.sql_query}")
             print(f"   - Has sources: {len(response.sources) if response.sources else 0}")
+
+            # Enforce SQL presence and optional exact match
+            assert response.sql_query and len(response.sql_query) > 0, "Expected SQL to be generated"
+            if response.sql_query:
+                for expected_sql in EXPECTED_SQL_CASE_3:
+                    assert expected_sql.upper() in response.sql_query.strip().upper(), "SQL mismatch for case 3"
             
-            # Check if response contains memory-related information
-            if response.answer and ("上海1号线" in response.answer or "基础部件" in response.answer or "其他零部件" in response.answer):
-                assert True
-            else:
-                print("⚠️ Response may not be using memory context effectively")
-                assert False
+            # Check memory count increases after the call
+            await self.check_memories_saved(TEST_EMAIL_3, expect_increase=True)
             
-            # Check if memories were saved to database
-            await self.check_memories_saved(TEST_EMAIL_2)
+            self.results["agent_memory_context"] = {
+                "success": True,
+                "answer_length": len(response.answer) if response.answer else 0,
+                "query_type": str(response.query_type),
+                "confidence": response.confidence,
+                "has_sql": bool(response.sql_query),
+                "has_sources": len(response.sources) if response.sources else 0
+            }
+            return True
+            
+        except Exception as e:
+            print(f"❌ Error testing agent with memory: {e}")
+            import traceback
+            traceback.print_exc()
+            self.results["agent_memory_context"] = {"success": False, "error": str(e)}
+            return False
+   
+    @pytest.mark.asyncio
+    async def test_continue_use_db(self):
+        """Test agent query with memory context"""
+        print("\n1️⃣ Testing agent query with memory context...")
+        
+        try:
+            if not self.agent.llm_available:
+                print("⚠️ LLM not available, skipping test")
+                self.results["agent_memory_context"] = {"success": False, "error": "LLM not available"}
+                return False
+            
+            test_question = "这个项目主要故障件零部件名称是什么，故障模式是什么?"
+            
+            response = await self.agent.query(
+                question=test_question,
+                user_email=TEST_EMAIL_4,
+                session_id=TEST_SESSION_4
+            )
+            
+            print(f"✅ Agent response received:")
+            print(f"   - Answer: {response}")
+            print(f"   - Query type: {response.query_type}")
+            print(f"   - Confidence: {response.confidence}")
+            print(f"   - Has SQL: {response.sql_query}")
+            print(f"   - Has sources: {len(response.sources) if response.sources else 0}")
+
+            # Enforce SQL presence and optional exact match
+            assert response.sql_query and len(response.sql_query) > 0, "Expected SQL to be generated"
+            if response.sql_query:
+                for expected_sql in EXPECTED_SQL_CASE_4:
+                    assert expected_sql.upper() in response.sql_query.strip().upper(), "SQL mismatch for case 4"
+            
+            # Check memory count increases after the call
+            await self.check_memories_saved(TEST_EMAIL_4, expect_increase=True)
             
             self.results["agent_memory_context"] = {
                 "success": True,
@@ -255,8 +322,10 @@ A: 上海1号线项目共发生了 **4 起** 故障，故障模式为 **“其�
             return False
    
 
-    async def check_memories_saved(self, user_email: str):
-        """Check if memories are being saved to the database"""
+    async def check_memories_saved(self, user_email: str, expect_increase: bool = False):
+        """Check if memories are being saved to the database.
+        When expect_increase is True, verify at least one new memory was created since last check for this user.
+        """
         try:
             from kangni_agents.models.history import Memory
             from kangni_agents.models.database import get_db_config
@@ -272,6 +341,12 @@ A: 上海1号线项目共发生了 **4 起** 故障，故障模式为 **“其�
                 print(f"📊 Database check:")
                 print(f"   - Memories in database for {user_email}: {memory_count}")
                 
+                if expect_increase:
+                    prev = self.results.get(f"mem_count:{user_email}")
+                    if prev is not None:
+                        assert memory_count > prev, f"Expected memory count to increase for {user_email} (prev={prev}, now={memory_count})"
+                    self.results[f"mem_count:{user_email}"] = memory_count
+
                 if memory_count > 0:
                     print("✅ Memories are being saved to database")
                     
@@ -339,39 +414,69 @@ A: 上海1号线项目共发生了 **4 起** 故障，故障模式为 **“其�
         
         # Run all tests
         test_methods = [
-            # self.test_agent_with_memory_context,
+            self.test_agent_with_memory_context,
             self.test_agent_with_memory_sql_query,
-            # self.test_agent_with_memory_fault
+            self.test_agent_with_memory_fault,
+            self.test_continue_use_db
         ]
         
         passed = 0
         failed = 0
-        
-        for test_method in test_methods:
+        failed_tests: List[str] = []
+        passed_tests: List[str] = []
+        failure_msgs: Dict[str, str] = {}
+
+        def case_name(index: int) -> str:
+            mapping = {
+                1: "Case 1 (RAG)",
+                2: "Case 2 (SQL)",
+                3: "Case 3 (SQL)",
+                4: "Case 4 (SQL)"
+            }
+            return mapping.get(index, f"Case {index}")
+
+        for i, test_method in enumerate(test_methods, start=1):
+            name = case_name(i)
             try:
-                if await test_method():
+                ok = await test_method()
+                if ok:
                     passed += 1
+                    passed_tests.append(name)
                 else:
                     failed += 1
+                    failed_tests.append(name)
             except Exception as e:
-                print(f"❌ Test {test_method.__name__} failed with error: {e}")
+                print(f"❌ Test {name} ({test_method.__name__}) failed with error: {e}")
                 import traceback
                 traceback.print_exc()
                 failed += 1
+                failed_tests.append(name)
+                failure_msgs[name] = str(e)
         
-        # Print summary
+        # Print summary (improved)
+        total = passed + failed
+        rate = (passed / total * 100) if total else 0.0
+        bar_len = 30
+        filled_len = int(round(bar_len * passed / float(total))) if total else 0
+        bar = '█' * filled_len + '-' * (bar_len - filled_len)
+
         print("\n" + "=" * 60)
         print("📊 REACT AGENT MEMORY TEST SUMMARY")
         print("=" * 60)
-        print(f"Total tests: {passed + failed}")
-        print(f"Passed: {passed}")
-        print(f"Failed: {failed}")
-        print(f"Success rate: {(passed/(passed+failed)*100):.1f}%")
-        
+        print(f"Total: {total} | Passed: {passed} | Failed: {failed} | Success: {rate:.1f}%")
+        print(f"[{bar}]")
         if failed == 0:
             print("\n✅ All react agent memory tests passed!")
         else:
-            print(f"\n❌ {failed} test(s) failed")
+            print(f"\n❌ {failed} test(s) failed:")
+            for name in failed_tests:
+                msg = failure_msgs.get(name, "")
+                suffix = f" - {msg}" if msg else ""
+                print(f"   - {name}{suffix}")
+            if passed_tests:
+                print("\n✅ Passed:")
+                for name in passed_tests:
+                    print(f"   - {name}")
         
         # Clean up test data after tests complete
         # Comment out the next line when doing manual testing to keep test data
