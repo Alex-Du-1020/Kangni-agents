@@ -156,6 +156,10 @@
         "id": 23,
         "question": "调用数据库查询玻璃钢罩板发生表面缺陷问题，根本原因是什么",
          "SQL": "WHERE material_name LIKE '%玻璃钢罩板%' AND defect_name LIKE '%表面缺陷%'"
+    },
+    {
+        "id": 24,
+        "question": "马来西亚RTSO项目发生了多少起故障？",
+         "SQL": "FROM kn_quality_trace_history_fault_info WHERE project_name LIKE '%马来西亚RTSO%'"
     }
-
 ]
