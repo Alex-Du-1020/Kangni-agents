@@ -38,6 +38,8 @@ class SolutionData(BaseModel):
     causeDesc: str = Field(..., description="原因描述", alias="causeDesc")
     causeItem: CauseItem = Field(..., description="原因项目", alias="causeItem")
     solution: str = Field(..., description="解决方案")
+    causeConfidence: int = Field(0, description="原因置信度，0-100", alias="causeConfidence")
+    source: SourceType = Field(..., description="数据来源", alias="source")
 
 class ImplementationData(BaseModel):
     """实施措施数据模型"""
@@ -45,6 +47,7 @@ class ImplementationData(BaseModel):
     causeItem: CauseItem = Field(..., description="原因项目", alias="causeItem")
     implementedResult: str = Field(..., description="实施结果", alias="implementedResult")
     solution: str = Field(..., description="解决方案")
+    causeConfidence: int = Field(0, description="原因置信度，0-100")
 
 # D4根因分析请求模型
 class D4RootCauseAnalysisRequest(BaseModel):
@@ -69,7 +72,6 @@ class D5CorrectiveActionsRequest(BaseModel):
 class D5CorrectiveActionsResponse(BaseModel):
     """D5纠正措施响应"""
     solutionData: List[SolutionData] = Field(..., description="解决方案列表", alias="solutionData")
-    solutionSummary: str = Field(..., description="解决方案总结", alias="solutionSummary")
 
 # D6实施措施请求模型
 class D6ImplementationActionsRequest(BaseModel):
@@ -82,7 +84,6 @@ class D6ImplementationActionsRequest(BaseModel):
 class D6ImplementationActionsResponse(BaseModel):
     """D6实施措施响应"""
     implementationList: List[ImplementationData] = Field(..., description="实施措施列表", alias="implementationList")
-    implementationSummary: str = Field(..., description="实施措施总结", alias="implementationSummary")
 
 # D4根因总结请求模型
 class D4RootCauseSummaryRequest(BaseModel):

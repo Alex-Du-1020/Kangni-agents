@@ -92,7 +92,7 @@
     {
         "id": 14,
         "question": "统计今年一月份到六月每个月的生产订单",
-        "SQL": "WHERE YEAR(planstarttime_t) = YEAR(CURDATE()) AND MONTH(planstarttime_t) BETWEEN 1 AND 6"
+        "SQL": "BETWEEN 1 AND 6"
     },
     {
         "id": 15,
@@ -123,8 +123,7 @@
         "id": 19,
         "question": "开关开裂的原因是什么？",
         "keywords": [
-            "化学",
-            "橡胶套"
+            "化学"
         ]
     },
     {
@@ -157,6 +156,6 @@
     {
         "id": 24,
         "question": "深圳地铁14号线项目一共发生多少起故障？",
-         "SQL": "FROM kn_quality_trace_history_fault_info WHERE project_name LIKE '%马来西亚RTSO%'"
+         "SQL": "FROM kn_quality_trace_history_fault_info WHERE project_name LIKE '%深圳地铁14号线%'"
     }
 ]

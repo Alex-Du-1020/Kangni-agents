@@ -35,7 +35,7 @@ class RAGFlowService:
             logger.error(f"RAG service connection test failed: {e}")
             return False
     
-    async def search_rag(self, query: str, dataset_ids: List[str], top_k: int = 5, is_need_merge_same_doc: bool = False, similarity_threshold: float = 0.3) -> List[RAGSearchResult]:
+    async def search_rag(self, query: str, dataset_ids: List[str], top_k: int = 5, is_need_merge_same_doc: bool = False, similarity_threshold: float = 0.3, need_rerank: bool = False) -> List[RAGSearchResult]:
         """调用RAGFlow MCP服务进行文档搜索"""
         try:
             async def _do_search():
@@ -43,15 +43,22 @@ class RAGFlowService:
                     async with ClientSession(read_stream, write_stream) as session:
                         await session.initialize()
 
+                        # 构建MCP工具参数
+                        arguments = {
+                            "dataset_ids": dataset_ids,
+                            "question": query,
+                            "top_k": top_k,
+                            "similarity_threshold": similarity_threshold
+                        }
+                        
+                        # 如果需要重排序，添加rerank_id参数
+                        if need_rerank:
+                            arguments["rerank_id"] = "bge-reranker-large___VLLM@VLLM"
+                        
                         # 调用MCP工具
                         response = await session.call_tool(
                             name="ragflow_retrieval",
-                            arguments={
-                                "dataset_ids": dataset_ids,
-                                "question": query,
-                                "top_k": top_k,
-                                "similarity_threshold": similarity_threshold
-                            }
+                            arguments=arguments
                         )
                         return response
             
@@ -333,11 +340,11 @@ class RAGFlowService:
         
         return formatted_answer
     
-    async def search_rag_with_answer(self, query: str, top_k: int = 5) -> Dict[str, Any]:
+    async def search_rag_with_answer(self, query: str, top_k: int = 5, need_rerank: bool = False) -> Dict[str, Any]:
         """搜索RAG并生成答案"""
         try:
             # 首先进行文档搜索，启用文档合并
-            search_results = await self.search_rag(query, settings.ragflow_dataset_ids, top_k, is_need_merge_same_doc=True)
+            search_results = await self.search_rag(query, settings.ragflow_dataset_ids, top_k, is_need_merge_same_doc=True, need_rerank=need_rerank)
             
             # 然后使用LLM生成答案
             answer = await self.generate_answer_with_llm(query, search_results)

@@ -77,7 +77,6 @@ async def d5_corrective_actions(request: D5CorrectiveActionsRequest):
     Returns:
         D5CorrectiveActionsResponse: 包含解决方案列表和总结：
             - solutionData: 解决方案列表
-            - solutionSummary: 解决方案总结
     
     Raises:
         HTTPException: 如果生成失败
@@ -88,14 +87,10 @@ async def d5_corrective_actions(request: D5CorrectiveActionsRequest):
         # 调用分析服务生成纠正措施
         solutionData = await d8_analysis_service.generate_corrective_actions(request)
         
-        # 生成解决方案总结
-        solutionSummary = await d8_analysis_service._generate_solution_summary(solutionData)
-        
         logger.info(f"D5纠正措施生成完成，共生成{len(solutionData)}个解决方案")
         
         return D5CorrectiveActionsResponse(
-            solutionData=solutionData,
-            solutionSummary=solutionSummary
+            solutionData=solutionData
         )
         
     except Exception as e:
@@ -120,7 +115,6 @@ async def d6_implementation_actions(request: D6ImplementationActionsRequest):
     Returns:
         D6ImplementationActionsResponse: 包含实施措施列表和总结：
             - implementationList: 实施措施列表
-            - implementationSummary: 实施措施总结
     
     Raises:
         HTTPException: 如果生成失败
@@ -131,14 +125,10 @@ async def d6_implementation_actions(request: D6ImplementationActionsRequest):
         # 调用分析服务生成实施措施
         implementationList = await d8_analysis_service.generate_implementation_actions(request)
         
-        # 生成实施措施总结
-        implementationSummary = await d8_analysis_service._generate_implementation_summary(implementationList)
-        
         logger.info(f"D6实施措施生成完成，共生成{len(implementationList)}个实施措施")
         
         return D6ImplementationActionsResponse(
-            implementationList=implementationList,
-            implementationSummary=implementationSummary
+            implementationList=implementationList
         )
         
     except Exception as e:
