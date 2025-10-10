@@ -11,9 +11,18 @@ import time
 from pathlib import Path
 from typing import List, Dict, Any
 import logging
+from dotenv import load_dotenv
 
 # Add src to path for imports
 sys.path.insert(0, str(Path(__file__).parent / "../.."))
+
+# Load environment variables from .env file
+env_path = Path(__file__).parent.parent.parent / '.env'
+if env_path.exists():
+    load_dotenv(env_path)
+    print(f"✅ 已加载.env文件: {env_path}")
+else:
+    print(f"⚠️  未找到.env文件: {env_path}")
 
 from kangni_agents.models import UserQuery
 from kangni_agents.agents.react_agent import kangni_agent
@@ -208,7 +217,7 @@ async def run_all_tests():
     failed = 0
     
     for i, test_case in enumerate(test_cases, 1):
-        # if(i not in [24]):  # Test both SQL and keyword validation
+        # if(i not in [23]):  # Test both SQL and keyword validation
         #     continue
         question = test_case.get("question", "")
         keywords = test_case.get("keywords", [])

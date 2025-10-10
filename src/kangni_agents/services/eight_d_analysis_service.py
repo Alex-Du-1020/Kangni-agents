@@ -547,32 +547,21 @@ class D8AnalysisService:
     async def generate_implementation_summary(self, request: D6ImplementationSummaryRequest) -> str:
         """生成实施措施总结"""
         try:
-            major_impls = [impl for impl in request.implementationList if getattr(impl, 'causeConfidence', 0) > 50]
-            minor_impls = [impl for impl in request.implementationList if 25 < getattr(impl, 'causeConfidence', 0) <= 50]
-
-            major_text = "\n".join([
-                f"- {impl.causeItem.value}维度: {impl.implementedResult}（置信度{impl.causeConfidence}）"
-                for impl in major_impls
-            ])
-            minor_text = "\n".join([
-                f"- {impl.causeItem.value}维度: {impl.implementedResult}（置信度{impl.causeConfidence}）"
-                for impl in minor_impls
-            ])
+            implementation_texts = ""
+            for implementation in request.implementationList:
+                implementation_texts += f"- {implementation.causeItem.value}维度: {implementation.implementedResult}\n"
 
             prompt = f"""
-            请只总结权重较高/重要的实施措施（causeConfidence>50视为主要；26~50视为次要建议措施），忽略权重较低的。请突出重点。
+            请总结以下实施措施：
 
             故障描述: {request.description}
             故障模式: {request.zdModelName}
             故障部位: {request.zdZeroPartName}
 
-            主要实施措施 (>50):
-            {major_text}
+            实施措施：
+            {implementation_texts}
 
-            次要建议措施 (26~50):
-            {minor_text}
-
-            只需总结上述内容，忽略未出现的维度。
+            请提供一个简洁的实施措施总结，突出关键措施和重点。
             """
 
             messages = [

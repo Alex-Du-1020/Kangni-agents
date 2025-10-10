@@ -47,7 +47,6 @@ class ImplementationData(BaseModel):
     causeItem: CauseItem = Field(..., description="原因项目", alias="causeItem")
     implementedResult: str = Field(..., description="实施结果", alias="implementedResult")
     solution: str = Field(..., description="解决方案")
-    causeConfidence: int = Field(0, description="原因置信度，0-100")
 
 # D4根因分析请求模型
 class D4RootCauseAnalysisRequest(BaseModel):
