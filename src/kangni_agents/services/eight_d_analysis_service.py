@@ -354,16 +354,22 @@ class D8AnalysisService:
         原因分析: {cause_analysis}
         维度描述: {cause_item.value} ({cause_desc})
 
-        请基于上述问题和原因，为该维度生成严谨、有效、具体的纠正措施建议，避免泛泛而谈。请控制在200字以内。
+        请基于上述问题和原因，为该维度生成严谨、有效、具体的纠正措施建议，避免泛泛而谈。
+        
+        重要要求：
+        1. 请直接给出最核心、最关键的纠正措施
+        2. 避免冗余描述，用词精准简洁
+        3. 确保答案完整且有意义
+        4. 不要使用"建议"、"应该"等冗余词汇
+        5. 只是纯文本输出，不要Markdown格式
         """
         messages = [
-            LLMMessage(role="system", content="你是一个资深质量管理专家，善于根据具体问题/原因制定纠正措施。请简洁明了，控制在200字以内。"),
+            LLMMessage(role="system", content="你是一个资深质量管理专家，善于根据具体问题/原因制定纠正措施。你需要用词精准简洁，确保答案完整且有意义。直接给出核心措施，避免冗余描述。"),
             LLMMessage(role="user", content=prompt)
         ]
         response = await self.llm_service.chat(messages)
         content = response.content.strip() if response and hasattr(response, 'content') else "未能生成有效纠正措施"
-        # 限制在150字符以内
-        return content[:150] if len(content) > 150 else content
+        return content
 
     async def _rag_search_solution_for_analysis(self, query: str, analysis: CauseAnalysis) -> str:
         """针对单个维度，基于文档内容RAG检索纠正措施。如无合适内容则返回None"""
@@ -427,16 +433,23 @@ class D8AnalysisService:
         问题描述: {problem_desc}
         原因描述: {cause_desc}
         纠正措施: {solution_text}
-        请为上述内容生成清晰具体、可操作、可验收的实施措施（实施结果）。避免笼统描述。请控制在200字以内。
+        请为上述内容生成清晰具体、可操作、可验收的实施措施（实施结果）。避免笼统描述。
+        
+        重要要求：
+        1. 请直接给出最核心、最关键的实施措施
+        2. 避免冗余描述，用词精准简洁
+        3. 确保答案完整且有意义
+        4. 不要使用"建议"、"应该"等冗余词汇
+        5. 重点描述具体的实施步骤和预期结果
+        6. 只是纯文本输出，不要Markdown格式
         """
         messages = [
-            LLMMessage(role="system", content="你是一个有丰富项目落地经验的质量改进专家，擅长制定具体可行的实施措施。请简洁明了，控制在200字以内。"),
+            LLMMessage(role="system", content="你是一个有丰富项目落地经验的质量改进专家，擅长制定具体可行的实施措施。你需要用词精准简洁，确保答案完整且有意义。直接给出核心实施措施，避免冗余描述。"),
             LLMMessage(role="user", content=prompt)
         ]
         response = await self.llm_service.chat(messages)
         content = response.content.strip() if response and hasattr(response, 'content') else "未能生成有效实施措施"
-        # 限制在150字符以内
-        return content[:150] if len(content) > 150 else content
+        return content
     
     def _get_dimension_descriptions(self, cause_items: List[CauseItem]) -> str:
         """获取维度详细说明"""
