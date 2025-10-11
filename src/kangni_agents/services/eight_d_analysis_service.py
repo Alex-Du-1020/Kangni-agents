@@ -341,8 +341,8 @@ class D8AnalysisService:
                     solution_text = await self._llm_generate_solution(rewritten_question, analysis.causeAnalysis, analysis.causeDesc, analysis.causeItem)
 
             solutions.append(SolutionData(
-                causeDesc=analysis.causeDesc,
-                causeItem=analysis.causeItem,
+                    causeDesc=analysis.causeDesc,
+                    causeItem=analysis.causeItem,
                 solution=solution_text,
                 source=analysis.source))
         return solutions
@@ -383,7 +383,7 @@ class D8AnalysisService:
     async def _rag_search_implement_for_analysis(self, query: str, solution: SolutionData) -> str:
         """针对单个维度，基于文档内容RAG检索纠正措施。如无合适内容则返回None"""
         # 构造维度针对性检索query，可包含描述、模式、部位、当前维度的原因文本
-        query = f"问题描述: {query}\n纠正措施 {solution.causeItem.value}: {solution.solution}\n 原因: {solution.causeDesc}"
+        query = f"问题描述: {query}\n纠正措施 {solution.solution}\n 原因: {solution.causeDesc}"
         try:
             rag_result = await self.rag_service.search_rag_with_answer(query, top_k=3, need_rerank=True)
             answers = rag_result.get("content", "")
@@ -399,13 +399,13 @@ class D8AnalysisService:
         """
         D6实施措施生成（原因描述+纠正措施+LLM生成实施结果）（按维度来源单独处理，AI/文档二选一链式流程）
         """
-        logger.info(f"开始D6实施措施生成（分源/链式），故障模式: {request.zdModelName}，故障部位: {request.zdZeroPartName}")
+        logger.info(f"开始D6实施措施生成，故障模式: {request.zdModelName}，故障部位: {request.zdZeroPartName}")
         rewritten_question = self._rewrite_question_for_implementation(request)
         results = []
         for solution in request.solutionData:
             if solution.source == SourceType.AI_GENERATED:
                 # AI生成的维度，直接LLM生成措施
-                implemented_text = await self._llm_generate_implementation(rewritten_question, solution.causeDesc, solution.solution, solution.causeItem)
+                implemented_text = await self._llm_generate_implementation(rewritten_question, solution.causeDesc, solution.solution)
             else:
                 # 文档来的，先尝试RAG查措施
                 rag_implemented = await self._rag_search_implement_for_analysis(rewritten_question, solution)
@@ -413,23 +413,20 @@ class D8AnalysisService:
                     implemented_text = rag_implemented
                 else:
                     # 没查到再LLM生成
-                    implemented_text = await self._llm_generate_implementation(rewritten_question, solution.causeDesc, solution.solution, solution.causeItem)
+                    implemented_text = await self._llm_generate_implementation(rewritten_question, solution.causeDesc, solution.solution)
 
             results.append(ImplementationData(
-                causeDesc=solution.causeDesc,
-                causeItem=solution.causeItem,
+                    causeDesc=solution.causeDesc,
                 implementedResult=implemented_text,
-                solution=solution.solution,
-                causeConfidence=getattr(solution, 'causeConfidence', 0)))
+                solution=solution.solution))
         return results
 
-    async def _llm_generate_implementation(self, problem_desc, cause_desc, solution_text, cause_item):
+    async def _llm_generate_implementation(self, problem_desc, cause_desc, solution_text):
         """LLM生成实施措施（根据原因描述与纠正措施）"""
         prompt = f"""
         问题描述: {problem_desc}
         原因描述: {cause_desc}
         纠正措施: {solution_text}
-        维度: {cause_item.value}
         请为上述内容生成清晰具体、可操作、可验收的实施措施（实施结果）。避免笼统描述。请控制在200字以内。
         """
         messages = [
@@ -466,7 +463,7 @@ class D8AnalysisService:
         return f"""
         针对故障模式"{request.zdModelName}"和故障部位"{request.zdZeroPartName}"，分析故障的根本原因。
         """
-
+    
     def _rewrite_question_for_solutions(self, request: D5CorrectiveActionsRequest) -> str:
         """重写问题以更好地聚焦故障模式和部位"""
         return f"""
@@ -553,26 +550,27 @@ class D8AnalysisService:
         try:
             implementation_texts = ""
             for implementation in request.implementationList:
-                implementation_texts += f"- {implementation.causeItem.value}维度: {implementation.implementedResult}\n"
-
+                cause_desc = implementation.causeDesc if implementation.causeDesc else "未指定原因"
+                implementation_texts += f"- {cause_desc}: {implementation.implementedResult}\n"
+            
             prompt = f"""
             请总结以下实施措施：
-
+            
             故障描述: {request.description}
             故障模式: {request.zdModelName}
             故障部位: {request.zdZeroPartName}
-
+            
             实施措施：
             {implementation_texts}
-
+            
             请提供一个简洁的实施措施总结，突出关键措施和重点。
             """
-
+            
             messages = [
                 LLMMessage(role="system", content="你是一个专业的项目管理专家，擅长总结实施措施。"),
                 LLMMessage(role="user", content=prompt)
             ]
-
+            
             response = await self.llm_service.chat(messages)
             return response.content
         except Exception as e:
