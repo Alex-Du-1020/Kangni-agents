@@ -19,6 +19,7 @@ class SourceType(str, Enum):
     """数据来源类型"""
     LOCAL_DOC = "本地文档"
     AI_GENERATED = "AI生成"
+    HISTORICAL_DATA = "历史数据"
 
 class ReferencedDocument(BaseModel):
     """引用文档模型"""
