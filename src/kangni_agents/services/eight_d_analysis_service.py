@@ -424,7 +424,8 @@ class D8AnalysisService:
             results.append(ImplementationData(
                     causeDesc=solution.causeDesc,
                 implementedResult=implemented_text,
-                solution=solution.solution))
+                solution=solution.solution,
+                source=solution.source))
         return results
 
     async def _llm_generate_implementation(self, problem_desc, cause_desc, solution_text):

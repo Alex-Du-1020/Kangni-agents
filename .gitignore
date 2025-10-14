@@ -54,3 +54,6 @@ logs/
 
 filtered_downloads/
 minio_downloads/
+
+test_data/
+docker_images/

@@ -52,6 +52,7 @@ class ImplementationData(BaseModel):
     causeDesc: Optional[str] = Field(None, description="原因描述", alias="causeDesc")
     implementedResult: str = Field(..., description="实施结果", alias="implementedResult")
     solution: str = Field(..., description="解决方案")
+    source: SourceType = Field(..., description="数据来源", alias="source")
 
 # D4根因分析请求模型
 class D4RootCauseAnalysisRequest(BaseModel):
