@@ -342,7 +342,6 @@ class D8AnalysisService:
 
             solutions.append(SolutionData(
                     causeDesc=analysis.causeDesc,
-                    causeItem=analysis.causeItem,
                 solution=solution_text,
                 source=analysis.source))
         return solutions
@@ -491,23 +490,36 @@ class D8AnalysisService:
         """
     
     async def generate_root_cause_summary(self, request: D4RootCauseSummaryRequest) -> str:
-        """生成根因分析总结"""
+        """生成根因分析总结（区分置信度，主要/次要原因）"""
         try:
-            analysis_text = "\n".join([
-                f"- {analysis.causeItem.value}维度: {analysis.causeAnalysis}"
-                for analysis in request.analysisData
+            # 按置信度分类
+            root_causes = [a for a in request.analysisData if getattr(a, 'causeConfidence', 0) >= 50]
+            possible_causes = [a for a in request.analysisData if 25 <= getattr(a, 'causeConfidence', 0) < 50]
+            # 忽略置信度小于25的
+            
+            root_causes_text = "\n".join([
+                f"- {analysis.causeItem.value}维度: {analysis.causeAnalysis}（置信度{getattr(analysis, 'causeConfidence', 'N/A')}）"
+                for analysis in root_causes
+            ])
+            
+            possible_causes_text = "\n".join([
+                f"- {analysis.causeItem.value}维度: {analysis.causeAnalysis}（置信度{getattr(analysis, 'causeConfidence', 'N/A')}）"
+                for analysis in possible_causes
             ])
             
             prompt = f"""
-            请总结以下根因分析结果：
+            请总结以下根因分析结果，按置信度分类：
             
             故障模式: {request.zdModelName}
             故障部位: {request.zdZeroPartName}
             
-            分析结果:
-            {analysis_text}
+            主要根因 (置信度≥50):
+            {root_causes_text}
             
-            请提供一个简洁的根因分析总结，突出关键原因和重点。
+            可能原因 (置信度25-49):
+            {possible_causes_text}
+            
+            请提供一个简洁的根因分析总结，突出主要根因，并简要提及可能原因。
             """
             
             messages = [
@@ -522,32 +534,23 @@ class D8AnalysisService:
             return "根因分析总结生成失败"
     
     async def generate_corrective_actions_summary(self, request: D5CorrectiveActionsSummaryRequest) -> str:
-        """生成纠正措施总结（区分置信度，主要/次要措施）"""
+        """生成纠正措施总结"""
         try:
-            major_solutions = [s for s in request.solutionData if getattr(s, 'causeConfidence', 0) > 50]
-            minor_solutions = [s for s in request.solutionData if 25 < getattr(s, 'causeConfidence', 0) <= 50]
-            # 忽略0~25的
-            major_text = "\n".join([
-                f"- {s.causeItem.value}维度: {s.solution}（置信度{s.causeConfidence}）"
-                for s in major_solutions
+            solution_text = "\n".join([
+                f"- {s.causeDesc}: {s.solution}"
+                for s in request.solutionData
             ])
-            minor_text = "\n".join([
-                f"- {s.causeItem.value}维度: {s.solution}（置信度{s.causeConfidence}）"
-                for s in minor_solutions
-            ])
+            
             prompt = f"""
-            请只总结权重较高/重要的纠正措施（causeConfidence>50，视为主要；25~50视为次要建议措施），忽略权重较低的。请突出重点。
+            请总结以下纠正措施：
             
             故障模式: {request.zdModelName}
             故障部位: {request.zdZeroPartName}
             
-            主要纠正措施 (>50):
-            {major_text}
+            纠正措施:
+            {solution_text}
             
-            次要建议措施 (26~50):
-            {minor_text}
-            
-            只需总结上述内容，忽略未出现的维度。
+            请提供一个简洁的纠正措施总结，突出关键措施和重点。
             """
             messages = [
                 LLMMessage(role="system", content="你是一个专业的质量管理专家，擅长总结纠正措施。"),

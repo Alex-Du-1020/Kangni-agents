@@ -32,16 +32,9 @@ class CauseAnalysis(BaseModel):
     causeItem: CauseItem = Field(..., description="原因项目", alias="causeItem")
     source: SourceType = Field(..., description="数据来源")
     referencedDocuments: Optional[List[ReferencedDocument]] = Field(None, description="引用的文档列表", alias="referencedDocuments")
+    causeConfidence: Optional[int] = Field(None, description="原因置信度", alias="causeConfidence")
 
 class SolutionData(BaseModel):
-    """解决方案数据模型"""
-    causeDesc: str = Field(..., description="原因描述", alias="causeDesc")
-    causeItem: CauseItem = Field(..., description="原因项目", alias="causeItem")
-    solution: str = Field(..., description="解决方案")
-    causeConfidence: int = Field(0, description="原因置信度，0-100", alias="causeConfidence")
-    source: SourceType = Field(..., description="数据来源", alias="source")
-
-class SolutionInputData(BaseModel):
     """解决方案数据模型"""
     causeDesc: str = Field(..., description="原因描述", alias="causeDesc")
     solution: str = Field(..., description="解决方案")
@@ -82,7 +75,7 @@ class D5CorrectiveActionsResponse(BaseModel):
 class D6ImplementationActionsRequest(BaseModel):
     """D6实施措施请求"""
     description: str = Field(..., description="问题描述")
-    solutionData: List[SolutionInputData] = Field(..., description="解决方案数据", alias="solutionData")
+    solutionData: List[SolutionData] = Field(..., description="解决方案数据", alias="solutionData")
     zdModelName: str = Field(..., description="故障模式名称", alias="zdModelName")
     zdZeroPartName: str = Field(..., description="故障部位名称", alias="zdZeroPartName")
 
