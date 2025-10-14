@@ -492,9 +492,13 @@ class D8AnalysisService:
     async def generate_root_cause_summary(self, request: D4RootCauseSummaryRequest) -> str:
         """生成根因分析总结（区分置信度，主要/次要原因）"""
         try:
-            # 按置信度分类
-            root_causes = [a for a in request.analysisData if getattr(a, 'causeConfidence', 0) >= 50]
-            possible_causes = [a for a in request.analysisData if 25 <= getattr(a, 'causeConfidence', 0) < 50]
+            # 按置信度分类，安全处理None值
+            def get_confidence(analysis):
+                confidence = getattr(analysis, 'causeConfidence', None)
+                return confidence if confidence is not None else 0
+            
+            root_causes = [a for a in request.analysisData if get_confidence(a) >= 50]
+            possible_causes = [a for a in request.analysisData if 25 <= get_confidence(a) < 50]
             # 忽略置信度小于25的
             
             root_causes_text = "\n".join([
