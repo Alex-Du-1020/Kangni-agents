@@ -35,8 +35,9 @@ class Settings(BaseSettings):
     embedding_api_key: Optional[str] = Field(default=None, alias="EMBEDDING_API_KEY")
     
     # Ollama配置
-    ollama_base_url: str = Field(default="http://158.193.6.221:8001/v1", alias="OLLAMA_BASE_URL")
-    ollama_model: str = Field(default="/data/model/models/openai-mirror/gpt-oss-20b", alias="OLLAMA_MODEL")
+    ollama_base_url: str = Field(default="http://158.158.4.66:4434/v1", alias="OLLAMA_BASE_URL")
+    ollama_model: str = Field(default="gpt-oss-20b", alias="OLLAMA_MODEL")
+    ollama_api_key: str = Field(default="test_api_key", alias="OLLAMA_API_KEY")
     
     # Minimum similarity score to consider a match
     similarity_threshold: Optional[float] = Field(default=0.3, alias="SIMILARITY_THRESHOLD")

@@ -46,8 +46,8 @@ class LLMProviderConfig:
     }
     
     OLLAMA_CONFIG = {
-        "base_url": "http://158.193.6.221:8001/v1",
-        "model_name": "/data/model/models/openai-mirror/gpt-oss-20b",
+        "base_url": "http://158.158.4.66:4434/v1",
+        "model_name": "gpt-oss-20b",
         "temperature": 0.1,
         "max_tokens": None,
         "timeout": 180  # Increased timeout for local Ollama
@@ -357,9 +357,11 @@ class OllamaProvider(BaseLLMProvider):
         super().__init__(config)
         self.base_url = config.base_url or "http://localhost:11434"
         self.headers = {
-            "Content-Type": "application/json",
-            "Authorization": "Bearer EMPTY"  # 根据你的curl命令添加
+            "Content-Type": "application/json"
         }
+        # 如果有API key，添加Authorization header
+        if config.api_key:
+            self.headers["Authorization"] = f"Bearer {config.api_key}"
     
     async def chat(
         self,
@@ -570,15 +572,16 @@ class CentralizedLLMService:
                 self.llm_client = AlibabaProvider(llm_config)
                 
             elif provider == "ollama":
-                # Ollama不需要API key，使用本地服务
+                # Ollama配置，支持API key
                 config = LLMProviderConfig.OLLAMA_CONFIG
                 # 使用环境变量覆盖默认配置
                 base_url = settings.ollama_base_url
                 model_name = settings.ollama_model
+                api_key = settings.ollama_api_key
                 
                 llm_config = OllamaConfig(
                     model_name=model_name,
-                    api_key="",  # Ollama不需要API key
+                    api_key=api_key,  # 使用配置中的API key
                     base_url=base_url,
                     temperature=config["temperature"],
                     max_tokens=config["max_tokens"],
