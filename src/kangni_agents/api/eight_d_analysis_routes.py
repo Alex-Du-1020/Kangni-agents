@@ -11,7 +11,9 @@ from ..models.eight_d_models import (
     D6ImplementationActionsRequest, D6ImplementationActionsResponse,
     D4RootCauseSummaryRequest, D4RootCauseSummaryResponse,
     D5CorrectiveActionsSummaryRequest, D5CorrectiveActionsSummaryResponse,
-    D6ImplementationSummaryRequest, D6ImplementationSummaryResponse
+    D6ImplementationSummaryRequest, D6ImplementationSummaryResponse,
+    D7PreventionActionsRequest, D7PreventionActionsResponse,
+    D8SummaryRequest, D8SummaryResponse
 )
 from ..services.eight_d_analysis_service import d8_analysis_service
 
@@ -236,3 +238,77 @@ async def d6_implementation_summary(request: D6ImplementationSummaryRequest):
     except Exception as e:
         logger.error(f"D6实施措施总结生成失败: {e}")
         raise HTTPException(status_code=500, detail=f"D6实施措施总结生成失败: {str(e)}")
+
+@router.post("/d7-prevention-summary", response_model=D7PreventionActionsResponse)
+async def d7_prevention_summary(request: D7PreventionActionsRequest):
+    """
+    D7预防措施总结接口
+    
+    根据实施措施数据，生成一个综合的预防措施总结，避免类似问题再次发生。
+    针对所有实施措施生成一个预防措施总结文本。
+    
+    Args:
+        request: D7预防措施请求，包含：
+            - implementationList: 实施措施数据列表
+            - description: 故障描述
+            - zdModelName: 故障模式名称
+            - zdZeroPartName: 故障部位名称
+    
+    Returns:
+        D7PreventionActionsResponse: 包含预防措施总结：
+            - preventionSummary: 预防措施总结文本
+    
+    Raises:
+        HTTPException: 如果生成失败
+    """
+    try:
+        logger.info(f"开始D7预防措施总结生成，故障模式: {request.zdModelName}")
+        
+        # 调用分析服务生成预防措施总结
+        preventionSummary = await d8_analysis_service.generate_prevention_summary(request)
+        
+        logger.info(f"D7预防措施总结生成完成")
+        
+        return D7PreventionActionsResponse(preventionSummary=preventionSummary, success=True)
+        
+    except Exception as e:
+        logger.error(f"D7预防措施生成失败: {e}")
+        raise HTTPException(status_code=500, detail=f"D7预防措施生成失败: {str(e)}")
+
+@router.post("/d8-summary", response_model=D8SummaryResponse)
+async def d8_summary(request: D8SummaryRequest):
+    """
+    D8综合总结接口
+    
+    基于D4、D5、D6的总结，生成一个综合的8D分析总结报告。
+    整合根因分析、纠正措施和实施措施的总结，形成完整的8D分析报告。
+    
+    Args:
+        request: D8总结请求，包含：
+            - zdModelName: 故障模式名称
+            - zdZeroPartName: 故障部位名称
+            - description: 故障描述
+            - d4Summary: D4根因总结
+            - d5Summary: D5纠正措施总结
+            - d6Summary: D6实施措施总结
+    
+    Returns:
+        D8SummaryResponse: 包含D8综合总结：
+            - d8Summary: 综合的8D分析总结报告
+    
+    Raises:
+        HTTPException: 如果总结生成失败
+    """
+    try:
+        logger.info(f"开始D8综合总结生成，故障模式: {request.zdModelName}")
+        
+        # 调用分析服务生成D8综合总结
+        d8Summary = await d8_analysis_service.generate_d8_summary(request)
+        
+        logger.info(f"D8综合总结生成完成")
+        
+        return D8SummaryResponse(d8Summary=d8Summary, success=True)
+        
+    except Exception as e:
+        logger.error(f"D8综合总结生成失败: {e}")
+        raise HTTPException(status_code=500, detail=f"D8综合总结生成失败: {str(e)}")

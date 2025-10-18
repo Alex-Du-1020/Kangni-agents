@@ -4,11 +4,11 @@
 import logging
 from typing import List, Dict, Any
 from ..models.eight_d_models import (
-    CauseAnalysis, SolutionData, ImplementationData,
+    CauseAnalysis, SolutionData, ImplementationData, PreventionData,
     CauseItem, SourceType, ReferencedDocument, D4RootCauseAnalysisRequest,
     D5CorrectiveActionsRequest, D6ImplementationActionsRequest,
     D4RootCauseSummaryRequest, D5CorrectiveActionsSummaryRequest,
-    D6ImplementationSummaryRequest
+    D6ImplementationSummaryRequest, D7PreventionActionsRequest
 )
 from ..models.llm_implementations import llm_service
 from ..models.llm_providers import LLMMessage
@@ -597,6 +597,99 @@ class D8AnalysisService:
         except Exception as e:
             logger.error(f"生成实施措施总结失败: {e}")
             return "实施措施总结生成失败"
+    
+    async def generate_prevention_summary(self, request: D7PreventionActionsRequest) -> str:
+        """
+        D7预防措施生成（基于实施措施生成预防措施总结）
+        针对所有实施措施生成一个综合的预防措施总结，避免类似问题再次发生
+        """
+        logger.info(f"开始D7预防措施生成，故障模式: {request.zdModelName}，故障部位: {request.zdZeroPartName}")
+        
+        # 构建实施措施文本
+        implementation_texts = ""
+        for implementation in request.implementationList:
+            cause_desc = implementation.causeDesc if implementation.causeDesc else "未指定原因"
+            implementation_texts += f"- {cause_desc}: {implementation.implementedResult}\n"
+        
+        prompt = f"""
+        请基于以下实施措施，生成一个综合的预防措施总结，确保类似问题不再发生：
+        
+        故障描述: {request.description}
+        故障模式: {request.zdModelName}
+        故障部位: {request.zdZeroPartName}
+        
+        实施措施：
+        {implementation_texts}
+        
+        请生成一个简洁而全面的预防措施总结，包含：
+        1. 针对每个原因的具体预防措施
+        2. 系统性的预防策略
+        3. 监控和检查要点
+        
+        要求：
+        - 用词精准简洁，避免冗余描述
+        - 确保答案完整且有意义
+        - 重点描述具体的预防步骤和预期效果
+        - 预防措施应该具有前瞻性，能够从根源上避免问题再次发生
+        - 只是纯文本输出，不要Markdown格式
+        """
+        
+        messages = [
+            LLMMessage(role="system", content="你是一个有丰富质量管理经验的质量改进专家，擅长制定前瞻性的预防措施总结。你需要用词精准简洁，确保答案完整且有意义。直接给出核心预防措施，避免冗余描述。"),
+            LLMMessage(role="user", content=prompt)
+        ]
+        
+        response = await self.llm_service.chat(messages)
+        content = response.content.strip() if response and hasattr(response, 'content') else "未能生成有效预防措施总结"
+        return content
+
+    async def generate_d8_summary(self, request) -> str:
+        """
+        D8综合总结生成
+        基于D4、D5、D6的总结，生成一个综合的8D分析总结报告
+        """
+        logger.info(f"开始D8综合总结生成，故障模式: {request.zdModelName}，故障部位: {request.zdZeroPartName}")
+        
+        prompt = f"""
+        请基于以下8D分析各阶段总结，生成一个综合的8D分析总结报告：
+        
+        故障描述: {request.description}
+        故障模式: {request.zdModelName}
+        故障部位: {request.zdZeroPartName}
+        
+        D4根因分析总结:
+        {request.d4Summary}
+        
+        D5纠正措施总结:
+        {request.d5Summary}
+        
+        D6实施措施总结:
+        {request.d6Summary}
+        
+        请生成一个简洁而全面的8D分析总结报告，包含：
+        1. 问题概述
+        2. 根本原因分析总结
+        3. 纠正措施总结
+        4. 实施措施总结
+        5. 整体效果评估
+        
+        要求：
+        - 用词精准简洁，避免冗余描述
+        - 确保答案完整且有意义
+        - 重点描述问题的解决过程和预期效果
+        - 总结应该具有逻辑性和连贯性
+        - 只是纯文本输出，不要Markdown格式
+        """
+        
+        messages = [
+            LLMMessage(role="system", content="你是一个有丰富质量管理经验的8D分析专家，擅长生成综合性的8D分析总结报告。你需要用词精准简洁，确保答案完整且有意义。直接给出核心总结内容，避免冗余描述。"),
+            LLMMessage(role="user", content=prompt)
+        ]
+        
+        response = await self.llm_service.chat(messages)
+        content = response.content.strip() if response and hasattr(response, 'content') else "未能生成有效D8综合总结"
+        return content
+
 
 # 全局服务实例
 d8_analysis_service = D8AnalysisService()

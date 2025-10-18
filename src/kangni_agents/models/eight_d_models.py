@@ -119,3 +119,39 @@ class D6ImplementationSummaryRequest(BaseModel):
 class D6ImplementationSummaryResponse(BaseModel):
     """D6实施措施总结响应"""
     implementationSummary: str = Field(..., description="措施实施总结", alias="implementationSummary")
+
+# D7预防措施数据模型
+class PreventionData(BaseModel):
+    """预防措施数据模型"""
+    causeDesc: Optional[str] = Field(None, description="原因描述", alias="causeDesc")
+    preventionMeasure: str = Field(..., description="预防措施", alias="preventionMeasure")
+    implementationResult: str = Field(..., description="实施结果", alias="implementationResult")
+    source: SourceType = Field(..., description="数据来源", alias="source")
+
+# D7预防措施请求模型
+class D7PreventionActionsRequest(BaseModel):
+    """D7预防措施请求"""
+    implementationList: List[ImplementationData] = Field(..., description="实施措施数据", alias="implementationList")
+    description: str = Field(..., description="问题描述")
+    zdModelName: str = Field(..., description="故障模式名称", alias="zdModelName")
+    zdZeroPartName: str = Field(..., description="故障部位名称", alias="zdZeroPartName")
+
+class D7PreventionActionsResponse(BaseModel):
+    """D7预防措施响应"""
+    success: bool = Field(..., description="是否成功", alias="success")
+    preventionSummary: str = Field(..., description="预防措施总结", alias="preventionSummary")
+
+# D8总结请求模型
+class D8SummaryRequest(BaseModel):
+    """D8总结请求"""
+    zdModelName: str = Field(..., description="故障模式名称", alias="zdModelName")
+    zdZeroPartName: str = Field(..., description="故障部位名称", alias="zdZeroPartName")
+    description: str = Field(..., description="问题描述")
+    d4Summary: str = Field(..., description="D4根因总结", alias="d4Summary")
+    d5Summary: str = Field(..., description="D5纠正措施总结", alias="d5Summary")
+    d6Summary: str = Field(..., description="D6实施措施总结", alias="d6Summary")
+
+class D8SummaryResponse(BaseModel):
+    """D8总结响应"""
+    success: bool = Field(..., description="是否成功", alias="success")
+    d8Summary: str = Field(..., description="D8综合总结", alias="d8Summary")
