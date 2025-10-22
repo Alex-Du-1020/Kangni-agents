@@ -28,7 +28,7 @@ class D8AnalysisService:
         Enhanced D4根因分析
         逻辑：1. 重写问题聚焦故障模式和部位 2. RAG搜索获取全面内容 3. LLM分析并分配到各维度
         """
-        logger.info(f"开始D4根因分析，故障模式: {request.zdModelName}, 故障部位: {request.zdZeroPartName}, 关键词: {getattr(request, 'faultKeyword', None)}")
+        logger.info(f"开始D4根因分析，故障模式: {request.zdModelName}, 故障部位: {request.zdZeroPartName}, 故障补充说明: {getattr(request, 'faultKeyword', None)}")
         
         # Step 1: 重写问题以更好地聚焦
         rewritten_question = self._rewrite_question_for_root_cause(request)
@@ -45,7 +45,7 @@ class D8AnalysisService:
         rag_result = await self.rag_service.search_rag_with_answer(question, top_k=5, need_rerank=True)
         rag_content = rag_result.get("content", "")
         
-        if not rag_content or "未找到" in rag_content:
+        if not rag_content or "未找到相关文档信息" in rag_content:
             logger.warning("RAG搜索未找到相关内容，使用LLM直接生成")
             return await self._generate_causes_with_llm(request)
         
@@ -128,7 +128,7 @@ class D8AnalysisService:
         
         故障模式: {request.zdModelName}
         故障部位: {request.zdZeroPartName}
-        故障关键词: {getattr(request, 'faultKeyword', '')}
+        故障故障补充说明: {getattr(request, 'faultKeyword', '')}
         
         需要分析的维度说明：
         {dimension_descriptions}
@@ -247,7 +247,7 @@ class D8AnalysisService:
         故障信息:
         - 故障模式: {request.zdModelName}
         - 故障部位: {request.zdZeroPartName}
-        - 故障关键词: {getattr(request, 'faultKeyword', '')}
+        - 故障故障补充说明: {getattr(request, 'faultKeyword', '')}
         
         需要分配的维度说明：
         {dimension_descriptions}
@@ -326,7 +326,7 @@ class D8AnalysisService:
         """
         D5纠正措施生成（按维度来源单独处理，AI/文档二选一链式流程）
         """
-        logger.info(f"开始D5纠正措施生成（分源/链式），故障模式: {request.zdModelName}，故障部位: {request.zdZeroPartName}，关键词: {getattr(request, 'faultKeyword', None)}")
+        logger.info(f"开始D5纠正措施生成（分源/链式），故障模式: {request.zdModelName}，故障部位: {request.zdZeroPartName}，故障补充说明: {getattr(request, 'faultKeyword', None)}")
         rewritten_question = self._rewrite_question_for_solutions(request)
         solutions = []
         for analysis in request.analysisData:
@@ -406,7 +406,7 @@ class D8AnalysisService:
         """
         D6实施措施生成（原因描述+纠正措施+LLM生成实施结果）（按维度来源单独处理，AI/文档二选一链式流程）
         """
-        logger.info(f"开始D6实施措施生成，故障模式: {request.zdModelName}，故障部位: {request.zdZeroPartName}，关键词: {getattr(request, 'faultKeyword', None)}")
+        logger.info(f"开始D6实施措施生成，故障模式: {request.zdModelName}，故障部位: {request.zdZeroPartName}，故障补充说明: {getattr(request, 'faultKeyword', None)}")
         rewritten_question = self._rewrite_question_for_implementation(request)
         results = []
         for solution in request.solutionData:
@@ -476,19 +476,19 @@ class D8AnalysisService:
     def _rewrite_question_for_root_cause(self, request: D4RootCauseAnalysisRequest) -> str:
         """重写问题以更好地聚焦故障模式和部位"""
         return f"""
-        针对故障模式"{request.zdModelName}"和故障部位"{request.zdZeroPartName}"，分析故障的根本原因。故障关键词: {getattr(request, 'faultKeyword', '')}
+        针对故障模式"{request.zdModelName}"和故障部位"{request.zdZeroPartName}"，分析故障的根本原因。故障故障补充说明: {getattr(request, 'faultKeyword', '')}
         """
     
     def _rewrite_question_for_solutions(self, request: D5CorrectiveActionsRequest) -> str:
         """重写问题以更好地聚焦故障模式和部位"""
         return f"""
-        针对故障模式"{request.zdModelName}"和故障部位"{request.zdZeroPartName}"，并根据故障的原因分析，生成纠正措施。故障关键词: {getattr(request, 'faultKeyword', '')}
+        针对故障模式"{request.zdModelName}"和故障部位"{request.zdZeroPartName}"，并根据故障的原因分析，生成纠正措施。故障故障补充说明: {getattr(request, 'faultKeyword', '')}
         """
 
     def _rewrite_question_for_implementation(self, request: D6ImplementationActionsRequest) -> str:
         """重写问题以更好地聚焦故障模式和部位"""
         return f"""
-        针对故障模式"{request.zdModelName}"和故障部位"{request.zdZeroPartName}"，并根据故障的原因分析和纠正措施，生成实施措施。故障关键词: {getattr(request, 'faultKeyword', '')}
+        针对故障模式"{request.zdModelName}"和故障部位"{request.zdZeroPartName}"，并根据故障的原因分析和纠正措施，生成实施措施。故障故障补充说明: {getattr(request, 'faultKeyword', '')}
         """
     
     async def generate_root_cause_summary(self, request: D4RootCauseSummaryRequest) -> str:
@@ -518,7 +518,7 @@ class D8AnalysisService:
             
             故障模式: {request.zdModelName}
             故障部位: {request.zdZeroPartName}
-            故障关键词: {getattr(request, 'faultKeyword', '')}
+            故障故障补充说明: {getattr(request, 'faultKeyword', '')}
             
             主要根因 (置信度≥50):
             {root_causes_text}
@@ -553,7 +553,7 @@ class D8AnalysisService:
             
             故障模式: {request.zdModelName}
             故障部位: {request.zdZeroPartName}
-            故障关键词: {getattr(request, 'faultKeyword', '')}
+            故障故障补充说明: {getattr(request, 'faultKeyword', '')}
             
             纠正措施:
             {solution_text}
@@ -584,7 +584,7 @@ class D8AnalysisService:
             故障描述: {request.description}
             故障模式: {request.zdModelName}
             故障部位: {request.zdZeroPartName}
-            故障关键词: {getattr(request, 'faultKeyword', '')}
+            故障故障补充说明: {getattr(request, 'faultKeyword', '')}
             
             实施措施：
             {implementation_texts}
@@ -608,7 +608,7 @@ class D8AnalysisService:
         D7预防措施生成（基于实施措施生成预防措施总结）
         针对所有实施措施生成一个综合的预防措施总结，避免类似问题再次发生
         """
-        logger.info(f"开始D7预防措施生成，故障模式: {request.zdModelName}，故障部位: {request.zdZeroPartName}，关键词: {getattr(request, 'faultKeyword', None)}")
+        logger.info(f"开始D7预防措施生成，故障模式: {request.zdModelName}，故障部位: {request.zdZeroPartName}，故障补充说明: {getattr(request, 'faultKeyword', None)}")
         
         # 构建实施措施文本
         implementation_texts = ""
@@ -622,7 +622,7 @@ class D8AnalysisService:
         故障描述: {request.description}
         故障模式: {request.zdModelName}
         故障部位: {request.zdZeroPartName}
-        故障关键词: {getattr(request, 'faultKeyword', '')}
+        故障故障补充说明: {getattr(request, 'faultKeyword', '')}
         
         实施措施：
         {implementation_texts}
@@ -654,7 +654,7 @@ class D8AnalysisService:
         D8综合总结生成
         基于D4、D5、D6的总结，生成一个综合的8D分析总结报告
         """
-        logger.info(f"开始D8综合总结生成，故障模式: {request.zdModelName}，故障部位: {request.zdZeroPartName}，关键词: {getattr(request, 'faultKeyword', None)}")
+        logger.info(f"开始D8综合总结生成，故障模式: {request.zdModelName}，故障部位: {request.zdZeroPartName}，故障补充说明: {getattr(request, 'faultKeyword', None)}")
         
         prompt = f"""
         请基于以下8D分析各阶段总结，生成一个综合的8D分析总结报告：
@@ -662,7 +662,7 @@ class D8AnalysisService:
         故障描述: {request.description}
         故障模式: {request.zdModelName}
         故障部位: {request.zdZeroPartName}
-        故障关键词: {getattr(request, 'faultKeyword', '')}
+        故障故障补充说明: {getattr(request, 'faultKeyword', '')}
         
         D4根因分析总结:
         {request.d4Summary}
